@@ -2,7 +2,7 @@
 
 ## Overview
 
-Dokumen ini mendeskripsikan desain teknis untuk **Sentinel Service**, backend server dari Killswitch yang dibangun menggunakan Go + Fiber mengikuti pola clean architecture. Sentinel Service bertanggung jawab untuk:
+Dokumen ini mendeskripsikan desain teknis untuk **Sentinel Service**, backend server dari Killswitch yang dibangun menggunakan **Python 3.12+ dan FastAPI** mengikuti pola clean architecture. Sentinel Service bertanggung jawab untuk:
 
 - Menerima stream transaksi Solana secara real-time via Geyser/WebSocket
 - Mengevaluasi setiap transaksi terhadap invariant rules yang dikonfigurasi
@@ -27,15 +27,20 @@ Desain ini di-trim untuk fokus pada demo path hackathon:
 
 | Keputusan | Pilihan | Alasan |
 |-----------|---------|--------|
-| HTTP Framework | Fiber v2 | Performa tinggi, API mirip Express, konsisten dengan Miora |
-| ORM | GORM | Auto-migrate, query builder, konsisten dengan Miora |
+| HTTP Framework | FastAPI | Async-native, auto-generated OpenAPI docs, Pydantic validation built-in, performa tinggi |
+| ORM | SQLAlchemy 2.0 (async) | Mature, async support, flexible query builder, wide ecosystem |
+| Migrations | Alembic | Standard migration tool untuk SQLAlchemy, version-controlled schema changes |
 | Database | PostgreSQL | Relational data (protocol → invariants → incidents), JSONB support |
-| Solana SDK | solana-go (gagliardetto) | Go SDK paling mature untuk Solana |
-| Real-time | WebSocket (Fiber) | Push update ke dashboard tanpa polling |
+| Solana SDK | solders + solana-py | Python SDK paling mature untuk Solana |
+| Real-time | FastAPI WebSocket | Native WebSocket support, async-compatible |
 | Auth | Wallet-based (ed25519) | Crypto-native, tanpa Firebase/password, wallet address = identity |
-| Alert | Telegram Bot API | Dimana protocol teams sudah ada, cukup untuk MVP |
-| Architecture | Clean Architecture | Separation of concerns, testable, konsisten dengan Miora |
-| DI | Manual DI Container | Sederhana, eksplisit, tanpa framework DI |
+| Alert | Telegram Bot API (httpx) | Async HTTP client, dimana protocol teams sudah ada, cukup untuk MVP |
+| Architecture | Clean Architecture | Separation of concerns, testable, dependency injection via FastAPI Depends() |
+| DI | FastAPI Depends() | Built-in dependency injection, deklaratif, type-safe |
+| Validation | Pydantic v2 | Built into FastAPI, fast validation, serialization, settings management |
+| Config | pydantic-settings | Type-safe env config, validation otomatis, .env file support |
+| ASGI Server | Uvicorn | High-performance ASGI server, async-native |
+| Testing | pytest + hypothesis | Property-based testing via hypothesis, fixtures via pytest |
 
 ## Architecture
 
@@ -47,15 +52,15 @@ graph TB
         UI[Web UI]
     end
 
-    subgraph Backend["Sentinel Service (Go + Fiber)"]
+    subgraph Backend["Sentinel Service (Python + FastAPI)"]
         direction TB
-        Router[Router + Middleware]
+        Router[FastAPI Router + Middleware]
         
-        subgraph Handlers["Handlers Layer"]
-            AuthH[Auth Handler]
-            ProtH[Protocol Handler]
-            InvH[Invariant Handler]
-            SimH[Simulate Handler]
+        subgraph Routes["API Routes Layer"]
+            AuthR[Auth Router]
+            ProtR[Protocol Router]
+            InvR[Invariant Router]
+            SimR[Simulate Router]
         end
 
         subgraph Services["Service Layer"]
@@ -81,7 +86,7 @@ graph TB
             TelegramC[Telegram Client]
         end
 
-        WSHub[WebSocket Hub]
+        WSManager[WebSocket Manager]
     end
 
     subgraph External["External Services"]
@@ -93,8 +98,8 @@ graph TB
     end
 
     UI -->|REST API + WS| Router
-    Router --> Handlers
-    Handlers --> Services
+    Router --> Routes
+    Routes --> Services
     Services --> Repos
     Services --> Clients
     Repos --> DB
@@ -105,8 +110,8 @@ graph TB
     SentinelSvc --> EvalSvc
     EvalSvc -->|breach| CBSvc
     EvalSvc -->|breach/alert| TelegramSvc
-    SentinelSvc --> WSHub
-    WSHub -->|Push updates| UI
+    SentinelSvc --> WSManager
+    WSManager -->|Push updates| UI
 ```
 
 ### Request Flow (REST API)
@@ -114,23 +119,23 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant C as Dashboard Client
-    participant R as Router + Auth Middleware
-    participant H as Handler
+    participant R as FastAPI Router + Auth Dependency
+    participant Route as Route Handler
     participant S as Service
     participant Repo as Repository
     participant DB as PostgreSQL
 
     C->>R: HTTP Request + Wallet Address Header
-    R->>R: Verify wallet against guardian_wallets
-    R->>H: Forward to handler
-    H->>H: Parse & validate DTO
-    H->>S: Call service method
-    S->>Repo: Database operation
-    Repo->>DB: SQL query
+    R->>R: Depends() → verify wallet against guardian_wallets
+    R->>Route: Forward to route handler
+    Route->>Route: Pydantic validates request body/params
+    Route->>S: Call service method
+    S->>Repo: Database operation (async)
+    Repo->>DB: SQL query (SQLAlchemy async)
     DB-->>Repo: Result
-    Repo-->>S: Entity/Error
-    S-->>H: Result/AppError
-    H-->>C: API Response Envelope
+    Repo-->>S: Model/Error
+    S-->>Route: Result/HTTPException
+    Route-->>C: API Response Envelope
 ```
 
 ### Sentinel Monitoring Flow
@@ -142,7 +147,7 @@ sequenceDiagram
     participant Eval as Evaluator
     participant CB as Circuit Breaker
     participant TG as Telegram Dispatcher
-    participant WS as WebSocket Hub
+    participant WS as WebSocket Manager
     participant Guardian as Guardian Program
 
     Geyser->>Sentinel: New transaction received
@@ -187,22 +192,22 @@ flowchart TD
     TRIGGER --> INCIDENT[Create Incident with escalation_reason]
 ```
 
-### Dependency Injection Flow
+### Dependency Injection Flow (FastAPI Depends)
 
-DI Container di `router/container.go` menginisialisasi semua dependency dalam urutan yang benar:
+FastAPI `Depends()` menginisialisasi semua dependency secara deklaratif:
 
 ```
-Config
-  └→ Database Connection (GORM)
+Settings (pydantic-settings)
+  └→ Database Engine + AsyncSession (SQLAlchemy async)
        └→ Clients
        │    ├→ Geyser Client (SOLANA_WS_URL)
        │    ├→ Solana RPC Client (SOLANA_RPC_URL, SENTINEL_KEYPAIR)
-       │    └→ Telegram Client (TELEGRAM_BOT_TOKEN)
-       └→ Repositories
-       │    ├→ Protocol Repository (DB)
-       │    ├→ Invariant Repository (DB)
-       │    └→ Incident Repository (DB)
-       └→ WebSocket Hub
+       │    └→ Telegram Client (TELEGRAM_BOT_TOKEN) via httpx
+       └→ Repositories (injected with AsyncSession)
+       │    ├→ Protocol Repository
+       │    ├→ Invariant Repository
+       │    └→ Incident Repository
+       └→ WebSocket Manager
        └→ Services
        │    ├→ Protocol Service (ProtocolRepo, InvariantRepo)
        │    ├→ Invariant Service (InvariantRepo)
@@ -210,180 +215,196 @@ Config
        │    ├→ Evaluator Service (InvariantRepo)
        │    ├→ Circuit Breaker Service (SolanaClient, ProtocolRepo, IncidentRepo)
        │    ├→ Telegram Dispatcher (TelegramClient)
-       │    ├→ Sentinel Service (GeyserClient, Evaluator, CircuitBreaker, TelegramDispatcher, WSHub, ProtocolRepo)
+       │    ├→ Sentinel Service (GeyserClient, Evaluator, CircuitBreaker, TelegramDispatcher, WSManager, ProtocolRepo)
        │    └→ Simulator Service (Evaluator)
-       └→ Handlers
-            ├→ Auth Handler (ProtocolRepo)
-            ├→ Protocol Handler (ProtocolService)
-            ├→ Invariant Handler (InvariantService)
-            └→ Simulate Handler (SimulatorService)
+       └→ Route Dependencies (via Depends())
+            ├→ get_current_wallet → Auth dependency
+            ├→ get_protocol_service → Protocol routes
+            ├→ get_invariant_service → Invariant routes
+            └→ get_simulator_service → Simulate routes
 ```
 
 ## Components and Interfaces
 
-### Interface Definitions
+### Protocol Definitions (Python ABCs + Protocols)
 
-Semua interface didefinisikan di `app/interfaces/` dan diimplementasikan oleh layer yang sesuai.
+Semua interface didefinisikan sebagai Python `Protocol` (typing) atau abstract base classes dan diimplementasikan oleh layer yang sesuai.
 
 #### Client Interfaces
 
-```go
-// interfaces/geyser.go
-type IGeyserClient interface {
-    Connect(ctx context.Context) error
-    Subscribe(programAddress string) error
-    Unsubscribe(programAddress string) error
-    OnTransaction(callback func(tx *ParsedTransaction))
-    Reconnect(ctx context.Context) error
-    Close() error
-}
+```python
+# app/clients/geyser.py
+from typing import Protocol, Callable, Awaitable
+from dataclasses import dataclass
+from datetime import datetime
 
-// ParsedTransaction adalah representasi internal transaksi yang di-parse dari stream
-type ParsedTransaction struct {
-    Hash            string
-    ProgramAddress  string
-    InstructionType string    // "transfer", "admin_change", "parameter_change", dll
-    Amount          float64
-    Accounts        []string
-    Timestamp       time.Time
-}
+@dataclass
+class ParsedTransaction:
+    """Representasi internal transaksi yang di-parse dari stream."""
+    hash: str
+    program_address: str
+    instruction_type: str  # "transfer", "admin_change", "parameter_change", dll
+    amount: float
+    accounts: list[str]
+    timestamp: datetime
 
-// interfaces/solana.go
-type ISolanaClient interface {
-    TriggerPause(ctx context.Context, protocolPDA string) (string, error)
-    Resume(ctx context.Context, protocolPDA string, guardianSignature []byte) (string, error)
-    GetAccountInfo(ctx context.Context, address string) ([]byte, error)
-}
+class IGeyserClient(Protocol):
+    async def connect(self) -> None: ...
+    async def subscribe(self, program_address: str) -> None: ...
+    async def unsubscribe(self, program_address: str) -> None: ...
+    def on_transaction(self, callback: Callable[[ParsedTransaction], Awaitable[None]]) -> None: ...
+    async def reconnect(self) -> None: ...
+    async def close(self) -> None: ...
 
-// interfaces/telegram.go
-type ITelegramClient interface {
-    SendMessage(chatID string, message string) error
-}
+# app/clients/solana.py
+class ISolanaClient(Protocol):
+    async def trigger_pause(self, protocol_pda: str) -> str: ...
+    async def resume(self, protocol_pda: str, guardian_signature: bytes) -> str: ...
+    async def get_account_info(self, address: str) -> bytes: ...
+
+# app/clients/telegram.py
+class ITelegramClient(Protocol):
+    async def send_message(self, chat_id: str, message: str) -> None: ...
 ```
 
 #### Repository Interfaces
 
-```go
-// interfaces/protocol_repository.go
-type IProtocolRepository interface {
-    Create(protocol *entities.Protocol) error
-    FindByID(id uuid.UUID) (*entities.Protocol, error)
-    FindByGuardianWallet(wallet string) ([]entities.Protocol, error)
-    FindByProgramAddress(address string) (*entities.Protocol, error)
-    FindAllActive() ([]entities.Protocol, error)
-    UpdateStatus(id uuid.UUID, status string) error
-}
+```python
+# app/repositories/base.py
+from typing import Protocol
+from uuid import UUID
+from app.models.protocol import Protocol as ProtocolModel
+from app.models.invariant import Invariant
+from app.models.incident import Incident
 
-// interfaces/invariant_repository.go
-type IInvariantRepository interface {
-    Create(invariant *entities.Invariant) error
-    FindByID(id uuid.UUID) (*entities.Invariant, error)
-    FindByProtocolID(protocolID uuid.UUID) ([]entities.Invariant, error)
-    FindEnabledByProtocolID(protocolID uuid.UUID) ([]entities.Invariant, error)
-}
+class IProtocolRepository(Protocol):
+    async def create(self, protocol: ProtocolModel) -> ProtocolModel: ...
+    async def find_by_id(self, id: UUID) -> ProtocolModel | None: ...
+    async def find_by_guardian_wallet(self, wallet: str) -> list[ProtocolModel]: ...
+    async def find_by_program_address(self, address: str) -> ProtocolModel | None: ...
+    async def find_all_active(self) -> list[ProtocolModel]: ...
+    async def update_status(self, id: UUID, status: str) -> None: ...
 
-// interfaces/incident_repository.go
-type IIncidentRepository interface {
-    Create(incident *entities.Incident) error
-    FindByID(id uuid.UUID) (*entities.Incident, error)
-    FindByProtocolID(protocolID uuid.UUID) ([]entities.Incident, error)
-}
+class IInvariantRepository(Protocol):
+    async def create(self, invariant: Invariant) -> Invariant: ...
+    async def find_by_id(self, id: UUID) -> Invariant | None: ...
+    async def find_by_protocol_id(self, protocol_id: UUID) -> list[Invariant]: ...
+    async def find_enabled_by_protocol_id(self, protocol_id: UUID) -> list[Invariant]: ...
+
+class IIncidentRepository(Protocol):
+    async def create(self, incident: Incident) -> Incident: ...
+    async def find_by_id(self, id: UUID) -> Incident | None: ...
+    async def find_by_protocol_id(self, protocol_id: UUID) -> list[Incident]: ...
 ```
 
 #### Service Interfaces
 
-```go
-// interfaces/protocol_service.go
-type IProtocolService interface {
-    RegisterProtocol(req *requests.RegisterProtocolRequest, guardianWallet string) (*entities.Protocol, error)
-    GetProtocol(id uuid.UUID, guardianWallet string) (*entities.Protocol, error)
-    ListProtocols(guardianWallet string) ([]entities.Protocol, error)
-    ResumeProtocol(id uuid.UUID, guardianWallet string, signature []byte) error
-}
+```python
+# app/services/interfaces.py
+from typing import Protocol
+from uuid import UUID
+from dataclasses import dataclass
+from app.clients.geyser import ParsedTransaction
+from app.schemas.requests import RegisterProtocolRequest, CreateInvariantRequest, SimulationParams
+from app.schemas.responses import ProtocolResponse, InvariantResponse, SimulationResult
 
-// interfaces/invariant_service.go
-type IInvariantService interface {
-    CreateInvariant(protocolID uuid.UUID, req *requests.CreateInvariantRequest) (*entities.Invariant, error)
-    ListInvariants(protocolID uuid.UUID) ([]entities.Invariant, error)
-}
+@dataclass
+class RuleResult:
+    invariant_id: UUID
+    invariant_type: str
+    status: str  # "pass", "warning", "breach"
+    measured_value: float
+    threshold: float
 
-// interfaces/evaluator.go
-type IEvaluator interface {
-    Evaluate(ctx context.Context, tx *ParsedTransaction, protocolID uuid.UUID) (*EvaluationResult, error)
-}
+@dataclass
+class EvaluationResult:
+    status: str           # "pass", "breach"
+    threat_level: str     # "LOW", "ELEVATED", "HIGH", "CRITICAL"
+    breached_rules: list[RuleResult]
+    escalation_reason: str | None
+    action: str           # "pause", "alert", or "" (no action)
 
-// EvaluationResult berisi hasil evaluasi termasuk severity escalation
-type EvaluationResult struct {
-    Status           string      // "pass", "breach"
-    ThreatLevel      string      // "LOW", "ELEVATED", "HIGH", "CRITICAL"
-    BreachedRules    []RuleResult // Semua rule yang breach atau warning
-    EscalationReason string      // Alasan escalation (jika ada)
-    Action           string      // "pause", "alert", atau "" (no action)
-}
+class IProtocolService(Protocol):
+    async def register_protocol(self, req: RegisterProtocolRequest, guardian_wallet: str) -> ProtocolResponse: ...
+    async def get_protocol(self, id: UUID, guardian_wallet: str) -> ProtocolResponse: ...
+    async def list_protocols(self, guardian_wallet: str) -> list[ProtocolResponse]: ...
+    async def resume_protocol(self, id: UUID, guardian_wallet: str, signature: bytes) -> None: ...
 
-type RuleResult struct {
-    InvariantID   uuid.UUID
-    InvariantType string
-    Status        string  // "pass", "warning", "breach"
-    MeasuredValue float64
-    Threshold     float64
-}
+class IInvariantService(Protocol):
+    async def create_invariant(self, protocol_id: UUID, req: CreateInvariantRequest) -> InvariantResponse: ...
+    async def list_invariants(self, protocol_id: UUID) -> list[InvariantResponse]: ...
 
-// interfaces/circuit_breaker.go
-type ICircuitBreaker interface {
-    TriggerPause(ctx context.Context, protocol *entities.Protocol, result *EvaluationResult, txHashes []string) (*entities.Incident, error)
-    Resume(ctx context.Context, protocol *entities.Protocol, guardianSignature []byte) error
-}
+class IEvaluator(Protocol):
+    async def evaluate(self, tx: ParsedTransaction, protocol_id: UUID) -> EvaluationResult: ...
 
-// interfaces/telegram_dispatcher.go
-type ITelegramDispatcher interface {
-    DispatchIncidentAlert(incident *entities.Incident, protocol *entities.Protocol) error
-    DispatchEscalationAlert(incident *entities.Incident, protocol *entities.Protocol, escalationReason string, contributingRules []RuleResult) error
-    DispatchEmergencyAlert(protocol *entities.Protocol, message string) error
-}
+class ICircuitBreaker(Protocol):
+    async def trigger_pause(self, protocol: ProtocolResponse, result: EvaluationResult, tx_hashes: list[str]) -> None: ...
+    async def resume(self, protocol: ProtocolResponse, guardian_signature: bytes) -> None: ...
 
-// interfaces/sentinel.go
-type ISentinel interface {
-    Start(ctx context.Context) error
-    Stop() error
-    AddProtocol(protocol *entities.Protocol) error
-    RemoveProtocol(protocolID uuid.UUID) error
-}
+class ITelegramDispatcher(Protocol):
+    async def dispatch_incident_alert(self, incident: dict, protocol: dict) -> None: ...
+    async def dispatch_escalation_alert(self, incident: dict, protocol: dict, escalation_reason: str, contributing_rules: list[RuleResult]) -> None: ...
+    async def dispatch_emergency_alert(self, protocol: dict, message: str) -> None: ...
 
-// interfaces/simulator.go
-type ISimulator interface {
-    RunDriftSimulation(params *requests.SimulationParams) (*responses.SimulationResult, error)
-}
+class ISentinel(Protocol):
+    async def start(self) -> None: ...
+    async def stop(self) -> None: ...
+    async def add_protocol(self, protocol: ProtocolResponse) -> None: ...
+    async def remove_protocol(self, protocol_id: UUID) -> None: ...
+
+class ISimulator(Protocol):
+    async def run_drift_simulation(self, params: SimulationParams) -> SimulationResult: ...
 ```
 
-### WebSocket Hub
+### WebSocket Manager
 
-```go
-// ws/hub.go
-type Hub struct {
-    clients    map[uuid.UUID]map[*Client]bool // protocol_id → set of clients
-    register   chan *ClientRegistration
-    unregister chan *Client
-    broadcast  chan *BroadcastMessage
-    mu         sync.RWMutex
-}
+```python
+# app/ws/manager.py
+from uuid import UUID
+from fastapi import WebSocket
+from dataclasses import dataclass, field
+import asyncio
+import json
 
-type Client struct {
-    ProtocolID uuid.UUID
-    Conn       *websocket.Conn
-    Send       chan []byte
-}
+@dataclass
+class WebSocketManager:
+    """Manages WebSocket connections per protocol."""
+    connections: dict[UUID, set[WebSocket]] = field(default_factory=dict)
+    _lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
-type BroadcastMessage struct {
-    ProtocolID uuid.UUID
-    Type       string      // "transaction", "incident", "status_change"
-    Data       interface{}
-}
+    async def connect(self, protocol_id: UUID, websocket: WebSocket) -> None:
+        """Register a WebSocket connection for a protocol."""
+        await websocket.accept()
+        async with self._lock:
+            if protocol_id not in self.connections:
+                self.connections[protocol_id] = set()
+            self.connections[protocol_id].add(websocket)
 
-func (h *Hub) Run()
-func (h *Hub) RegisterClient(protocolID uuid.UUID, conn *websocket.Conn)
-func (h *Hub) UnregisterClient(client *Client)
-func (h *Hub) BroadcastToProtocol(protocolID uuid.UUID, msgType string, data interface{})
+    async def disconnect(self, protocol_id: UUID, websocket: WebSocket) -> None:
+        """Remove a WebSocket connection."""
+        async with self._lock:
+            if protocol_id in self.connections:
+                self.connections[protocol_id].discard(websocket)
+                if not self.connections[protocol_id]:
+                    del self.connections[protocol_id]
+
+    async def broadcast_to_protocol(
+        self, protocol_id: UUID, msg_type: str, data: dict
+    ) -> None:
+        """Broadcast message to all clients subscribed to a protocol."""
+        message = json.dumps({"type": msg_type, "data": data})
+        async with self._lock:
+            clients = self.connections.get(protocol_id, set()).copy()
+        
+        disconnected = []
+        for client in clients:
+            try:
+                await client.send_text(message)
+            except Exception:
+                disconnected.append(client)
+        
+        for client in disconnected:
+            await self.disconnect(protocol_id, client)
 ```
 
 ### Desain Komponen Kunci
@@ -392,14 +413,24 @@ func (h *Hub) BroadcastToProtocol(protocolID uuid.UUID, msgType string, data int
 
 Evaluator adalah komponen inti yang mengevaluasi setiap transaksi terhadap semua invariant rules aktif dan menghitung combined threat level:
 
-```go
-// services/evaluator.go
-type evaluationStrategy func(ctx context.Context, tx *ParsedTransaction, inv *entities.Invariant) (*RuleResult, error)
+```python
+# app/services/evaluator.py
+from typing import Callable, Awaitable
 
-type EvaluatorService struct {
-    invariantRepo interfaces.IInvariantRepository
-    strategies    map[string]evaluationStrategy
-}
+EvaluationStrategy = Callable[
+    [ParsedTransaction, Invariant], Awaitable[RuleResult]
+]
+
+class EvaluatorService:
+    def __init__(self, invariant_repo: IInvariantRepository):
+        self.invariant_repo = invariant_repo
+        self.strategies: dict[str, EvaluationStrategy] = {
+            "WITHDRAWAL_RATE": self._eval_withdrawal_rate,
+            "TVL_DROP": self._eval_tvl_drop,
+            "ADMIN_KEY_CHANGE": self._eval_admin_key_change,
+            "SINGLE_TX_SIZE": self._eval_single_tx_size,
+            "PARAMETER_CHANGE": self._eval_parameter_change,
+        }
 ```
 
 **Alur evaluasi:**
@@ -420,18 +451,18 @@ type EvaluatorService struct {
 - `WITHDRAWAL_RATE`: Hitung total withdrawal dalam time_window → bandingkan threshold
 - `TVL_DROP`: Hitung persentase penurunan TVL dalam time_window → bandingkan threshold
 - `ADMIN_KEY_CHANGE`: Deteksi instruction type admin/authority change → breach jika terdeteksi
-- `SINGLE_TX_SIZE`: Bandingkan tx.Amount langsung dengan threshold
+- `SINGLE_TX_SIZE`: Bandingkan tx.amount langsung dengan threshold
 - `PARAMETER_CHANGE`: Deteksi instruction type parameter modification → breach jika terdeteksi
 
 #### Simulator (dengan Adjustable Parameters)
 
 Simulator memutar ulang data transaksi historis Drift hack melalui Evaluator:
 
-```go
-// services/simulator.go
-type SimulatorService struct {
-    evaluator interfaces.IEvaluator
-}
+```python
+# app/services/simulator.py
+class SimulatorService:
+    def __init__(self, evaluator: IEvaluator):
+        self.evaluator = evaluator
 ```
 
 **Alur simulasi:**
@@ -445,106 +476,165 @@ type SimulatorService struct {
 
 #### Geyser Client
 
-```go
-// clients/geyser.go
-type GeyserClient struct {
-    wsURL          string
-    conn           *websocket.Conn
-    subscriptions  map[string]bool
-    callback       func(tx *ParsedTransaction)
-    mu             sync.RWMutex
-    reconnectDelay time.Duration // 5 detik (fixed per requirement)
-}
+```python
+# app/clients/geyser.py
+import asyncio
+import websockets
+
+class GeyserClient:
+    def __init__(self, ws_url: str):
+        self.ws_url = ws_url
+        self.connection: websockets.WebSocketClientProtocol | None = None
+        self.subscriptions: set[str] = set()
+        self._callback: Callable[[ParsedTransaction], Awaitable[None]] | None = None
+        self._reconnect_delay: float = 5.0  # Fixed 5-second delay per requirement
+        self._running: bool = False
 ```
 
 **Reconnection:** Fixed 5-second delay sesuai requirement 7.5.
 
 #### Sentinel Service (Orchestrator)
 
-```go
-// services/sentinel.go
-type SentinelService struct {
-    geyser              interfaces.IGeyserClient
-    evaluator           interfaces.IEvaluator
-    circuitBreaker      interfaces.ICircuitBreaker
-    telegramDispatcher  interfaces.ITelegramDispatcher
-    wsHub               *ws.Hub
-    protocolRepo        interfaces.IProtocolRepository
-    ctx                 context.Context
-    cancel              context.CancelFunc
-}
+```python
+# app/services/sentinel.py
+class SentinelService:
+    def __init__(
+        self,
+        geyser: IGeyserClient,
+        evaluator: IEvaluator,
+        circuit_breaker: ICircuitBreaker,
+        telegram_dispatcher: ITelegramDispatcher,
+        ws_manager: WebSocketManager,
+        protocol_repo: IProtocolRepository,
+    ):
+        self.geyser = geyser
+        self.evaluator = evaluator
+        self.circuit_breaker = circuit_breaker
+        self.telegram_dispatcher = telegram_dispatcher
+        self.ws_manager = ws_manager
+        self.protocol_repo = protocol_repo
+        self._task: asyncio.Task | None = None
 ```
 
 **Alur kerja:**
-1. `Start()`: Load semua active protocols → subscribe ke Geyser → register callback
-2. Callback `onTransaction()`:
+1. `start()`: Load semua active protocols → subscribe ke Geyser → register callback
+2. Callback `on_transaction()`:
    a. Evaluasi terhadap semua invariant rules (termasuk severity escalation)
    b. Jika CRITICAL + action "pause" → trigger circuit breaker → create incident → dispatch Telegram alert → broadcast via WS
    c. Jika breach + action "alert" → dispatch Telegram alert → broadcast via WS
    d. Jika pass → broadcast TX + threat level via WS
-3. `Stop()`: Cancel context → close Geyser connection
+3. `stop()`: Cancel asyncio task → close Geyser connection
 
 ## Data Models
 
-### Entity Definitions (GORM)
+### SQLAlchemy Model Definitions
 
 3 entitas saja untuk MVP: Protocol, Invariant, Incident.
 
-#### Protocol Entity
+#### Protocol Model
 
-```go
-// entities/protocol.go
-type Protocol struct {
-    ID              uuid.UUID   `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-    ProgramAddress  string      `gorm:"type:varchar(64);uniqueIndex;not null" json:"program_address"`
-    Name            string      `gorm:"type:varchar(255);not null" json:"name"`
-    GuardianWallet  string      `gorm:"type:varchar(64);not null;index" json:"guardian_wallet"`
-    TelegramChatID  string      `gorm:"type:varchar(64)" json:"telegram_chat_id"`
-    Status          string      `gorm:"type:varchar(20);default:'active'" json:"status"` // "active", "paused"
-    CreatedAt       time.Time   `gorm:"autoCreateTime" json:"created_at"`
-    
-    // Associations
-    Invariants      []Invariant `gorm:"foreignKey:ProtocolID;constraint:OnDelete:CASCADE" json:"invariants,omitempty"`
-    Incidents       []Incident  `gorm:"foreignKey:ProtocolID;constraint:OnDelete:CASCADE" json:"incidents,omitempty"`
-}
+```python
+# app/models/protocol.py
+import uuid
+from datetime import datetime
+from sqlalchemy import String, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.core.database import Base
+
+class Protocol(Base):
+    __tablename__ = "protocols"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    program_address: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    guardian_wallet: Mapped[str] = mapped_column(
+        String(64), nullable=False, index=True
+    )
+    telegram_chat_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    invariants: Mapped[list["Invariant"]] = relationship(
+        back_populates="protocol", cascade="all, delete-orphan"
+    )
+    incidents: Mapped[list["Incident"]] = relationship(
+        back_populates="protocol", cascade="all, delete-orphan"
+    )
 ```
 
-#### Invariant Entity
+#### Invariant Model
 
-```go
-// entities/invariant.go
-type Invariant struct {
-    ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-    ProtocolID uuid.UUID `gorm:"type:uuid;not null;index" json:"protocol_id"`
-    Type       string    `gorm:"type:varchar(50);not null" json:"type"`
-    Threshold  float64   `gorm:"type:decimal(20,6);not null" json:"threshold"`
-    TimeWindow int       `gorm:"not null" json:"time_window"`
-    Action     string    `gorm:"type:varchar(20);not null" json:"action"` // "pause" atau "alert"
-    Enabled    bool      `gorm:"default:true" json:"enabled"`
-    
-    // Association
-    Protocol   Protocol  `gorm:"foreignKey:ProtocolID" json:"-"`
-}
+```python
+# app/models/invariant.py
+import uuid
+from sqlalchemy import String, Float, Integer, Boolean, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.core.database import Base
+
+class Invariant(Base):
+    __tablename__ = "invariants"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    protocol_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("protocols.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    time_window: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)  # "pause" or "alert"
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Relationships
+    protocol: Mapped["Protocol"] = relationship(back_populates="invariants")
 ```
 
-#### Incident Entity
+#### Incident Model
 
-```go
-// entities/incident.go
-type Incident struct {
-    ID               uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-    ProtocolID       uuid.UUID      `gorm:"type:uuid;not null;index" json:"protocol_id"`
-    InvariantID      uuid.UUID      `gorm:"type:uuid;not null" json:"invariant_id"`
-    TriggerTime      time.Time      `gorm:"not null" json:"trigger_time"`
-    TxHashes         datatypes.JSON `gorm:"type:jsonb" json:"tx_hashes"`
-    ActionTaken      string         `gorm:"type:varchar(20);not null" json:"action_taken"`
-    DamageEstimate   float64        `gorm:"type:decimal(20,6);default:0" json:"damage_estimate"`
-    EscalationReason *string        `gorm:"type:text" json:"escalation_reason"`
-    
-    // Associations
-    Protocol         Protocol       `gorm:"foreignKey:ProtocolID" json:"protocol,omitempty"`
-    Invariant        Invariant      `gorm:"foreignKey:InvariantID" json:"invariant,omitempty"`
-}
+```python
+# app/models/incident.py
+import uuid
+from datetime import datetime
+from sqlalchemy import String, Float, DateTime, Text, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from app.core.database import Base
+
+class Incident(Base):
+    __tablename__ = "incidents"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    protocol_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("protocols.id", ondelete="CASCADE"),
+        nullable=False, index=True
+    )
+    invariant_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("invariants.id"), nullable=False
+    )
+    trigger_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    tx_hashes: Mapped[list] = mapped_column(JSONB, default=list)
+    action_taken: Mapped[str] = mapped_column(String(20), nullable=False)
+    damage_estimate: Mapped[float] = mapped_column(Float, default=0.0)
+    escalation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Relationships
+    protocol: Mapped["Protocol"] = relationship(back_populates="incidents")
+    invariant: Mapped["Invariant"] = relationship()
 ```
 
 ### Database Schema (ER Diagram)
@@ -565,7 +655,7 @@ erDiagram
         uuid id PK
         uuid protocol_id FK
         varchar type
-        decimal threshold
+        float threshold
         int time_window
         varchar action
         boolean enabled
@@ -578,7 +668,7 @@ erDiagram
         timestamp trigger_time
         jsonb tx_hashes
         varchar action_taken
-        decimal damage_estimate
+        float damage_estimate
         text escalation_reason
     }
     
@@ -587,120 +677,144 @@ erDiagram
     INVARIANT ||--o{ INCIDENT : "triggers"
 ```
 
-### DTO Definitions
+### Database Setup
 
-#### Request DTOs
+```python
+# app/core/database.py
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import DeclarativeBase
 
-```go
-// dto/requests/protocol.go
-type RegisterProtocolRequest struct {
-    ProgramAddress string `json:"program_address" validate:"required"`
-    Name           string `json:"name" validate:"required,min=1,max=255"`
-    TelegramChatID string `json:"telegram_chat_id"`
-}
+class Base(DeclarativeBase):
+    pass
 
-// dto/requests/invariant.go
-type CreateInvariantRequest struct {
-    Type       string  `json:"type" validate:"required,oneof=WITHDRAWAL_RATE TVL_DROP ADMIN_KEY_CHANGE SINGLE_TX_SIZE PARAMETER_CHANGE"`
-    Threshold  float64 `json:"threshold" validate:"required,gt=0"`
-    TimeWindow int     `json:"time_window" validate:"required,gt=0"`
-    Action     string  `json:"action" validate:"required,oneof=pause alert"`
-}
+engine = None
+async_session_factory = None
 
-// dto/requests/auth.go
-type VerifyWalletRequest struct {
-    WalletAddress string `json:"wallet_address" validate:"required"`
-    Message       string `json:"message" validate:"required"`
-    Signature     string `json:"signature" validate:"required"` // Base58-encoded ed25519 signature
-}
+def init_db(database_url: str):
+    """Initialize async SQLAlchemy engine and session factory."""
+    global engine, async_session_factory
+    engine = create_async_engine(database_url, echo=False, pool_pre_ping=True)
+    async_session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
-// dto/requests/simulate.go
-type SimulationParams struct {
-    WithdrawalRateThreshold *float64 `query:"withdrawal_rate_threshold"` // Default: 5000000 ($5M)
-    WithdrawalRateWindow    *int     `query:"withdrawal_rate_window"`    // Default: 60 (1 menit)
-    TVLDropThreshold        *float64 `query:"tvl_drop_threshold"`        // Default: 10.0 (10%)
-    TVLDropWindow           *int     `query:"tvl_drop_window"`           // Default: 300 (5 menit)
-}
+async def get_session() -> AsyncSession:
+    """Dependency for FastAPI — yields an async database session."""
+    async with async_session_factory() as session:
+        yield session
 ```
 
-#### Response DTOs
+### Pydantic Schema Definitions
 
-```go
-// dto/responses/protocol.go
-type ProtocolResponse struct {
-    ID              uuid.UUID           `json:"id"`
-    ProgramAddress  string              `json:"program_address"`
-    Name            string              `json:"name"`
-    GuardianWallet  string              `json:"guardian_wallet"`
-    TelegramChatID  string              `json:"telegram_chat_id"`
-    Status          string              `json:"status"`
-    CreatedAt       time.Time           `json:"created_at"`
-    Invariants      []InvariantResponse `json:"invariants,omitempty"`
-}
+#### Request Schemas
 
-// dto/responses/invariant.go
-type InvariantResponse struct {
-    ID         uuid.UUID `json:"id"`
-    ProtocolID uuid.UUID `json:"protocol_id"`
-    Type       string    `json:"type"`
-    Threshold  float64   `json:"threshold"`
-    TimeWindow int       `json:"time_window"`
-    Action     string    `json:"action"`
-    Enabled    bool      `json:"enabled"`
-}
+```python
+# app/schemas/requests.py
+from pydantic import BaseModel, Field
+from typing import Literal
 
-// dto/responses/auth.go
-type AuthResponse struct {
-    WalletAddress string `json:"wallet_address"`
-    IsGuardian    bool   `json:"is_guardian"`
-}
+class RegisterProtocolRequest(BaseModel):
+    program_address: str = Field(..., min_length=1, max_length=64)
+    name: str = Field(..., min_length=1, max_length=255)
+    telegram_chat_id: str | None = None
 
-// dto/responses/simulate.go
-type SimulationResult struct {
-    Timeline             []SimulationEvent `json:"timeline"`
-    DamageWithKillswitch float64           `json:"damage_with_killswitch"`
-    DamageWithout        float64           `json:"damage_without"` // $285M
-    AmountSaved          float64           `json:"amount_saved"`
-    RulesUsed            []InvariantResponse `json:"rules_used"`
-}
+class CreateInvariantRequest(BaseModel):
+    type: Literal[
+        "WITHDRAWAL_RATE", "TVL_DROP", "ADMIN_KEY_CHANGE",
+        "SINGLE_TX_SIZE", "PARAMETER_CHANGE"
+    ]
+    threshold: float = Field(..., gt=0)
+    time_window: int = Field(..., gt=0)
+    action: Literal["pause", "alert"]
 
-type SimulationEvent struct {
-    Timestamp       time.Time `json:"timestamp"`
-    EventType       string    `json:"event_type"`
-    Description     string    `json:"description"`
-    TxDetails       string    `json:"tx_details,omitempty"`
-    EvalResult      string    `json:"eval_result"`      // "pass", "warning", "breach"
-    ThreatLevel     string    `json:"threat_level"`      // "LOW", "ELEVATED", "HIGH", "CRITICAL"
-    ResponseAction  string    `json:"response_action"`   // "monitor", "alert", "pause"
-    CumulativeDrain float64   `json:"cumulative_drain"`
-}
+class VerifyWalletRequest(BaseModel):
+    wallet_address: str = Field(..., min_length=1)
+    message: str = Field(..., min_length=1)
+    signature: str = Field(..., min_length=1)  # Base58-encoded ed25519 signature
+
+class SimulationParams(BaseModel):
+    withdrawal_rate_threshold: float | None = None  # Default: 5_000_000 ($5M)
+    withdrawal_rate_window: int | None = None       # Default: 60 (1 minute)
+    tvl_drop_threshold: float | None = None         # Default: 10.0 (10%)
+    tvl_drop_window: int | None = None              # Default: 300 (5 minutes)
 ```
 
-### API Response Envelope
+#### Response Schemas
 
-```go
-// output/response.go
-type APIResponse struct {
-    Status  string      `json:"status"`  // "success" atau "error"
-    Message string      `json:"message"`
-    Data    interface{} `json:"data"`
-}
+```python
+# app/schemas/responses.py
+from pydantic import BaseModel
+from uuid import UUID
+from datetime import datetime
+from typing import Any
 
-func Success(c *fiber.Ctx, statusCode int, message string, data interface{}) error {
-    return c.Status(statusCode).JSON(APIResponse{
-        Status:  "success",
-        Message: message,
-        Data:    data,
-    })
-}
+class ProtocolResponse(BaseModel):
+    id: UUID
+    program_address: str
+    name: str
+    guardian_wallet: str
+    telegram_chat_id: str | None
+    status: str
+    created_at: datetime
+    invariants: list["InvariantResponse"] = []
 
-func Error(c *fiber.Ctx, statusCode int, message string) error {
-    return c.Status(statusCode).JSON(APIResponse{
-        Status:  "error",
-        Message: message,
-        Data:    nil,
-    })
-}
+    model_config = {"from_attributes": True}
+
+class InvariantResponse(BaseModel):
+    id: UUID
+    protocol_id: UUID
+    type: str
+    threshold: float
+    time_window: int
+    action: str
+    enabled: bool
+
+    model_config = {"from_attributes": True}
+
+class AuthResponse(BaseModel):
+    wallet_address: str
+    is_guardian: bool
+
+class SimulationEvent(BaseModel):
+    timestamp: datetime
+    event_type: str
+    description: str
+    tx_details: str | None = None
+    eval_result: str       # "pass", "warning", "breach"
+    threat_level: str      # "LOW", "ELEVATED", "HIGH", "CRITICAL"
+    response_action: str   # "monitor", "alert", "pause"
+    cumulative_drain: float
+
+class SimulationResult(BaseModel):
+    timeline: list[SimulationEvent]
+    damage_with_killswitch: float
+    damage_without: float  # $285M
+    amount_saved: float
+    rules_used: list[InvariantResponse]
+
+class APIResponse(BaseModel):
+    """Standard API response envelope."""
+    status: str  # "success" or "error"
+    message: str
+    data: Any = None
+```
+
+### API Response Helpers
+
+```python
+# app/api/response.py
+from fastapi.responses import JSONResponse
+from app.schemas.responses import APIResponse
+
+def success_response(data: Any, message: str = "Success", status_code: int = 200) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=APIResponse(status="success", message=message, data=data).model_dump(mode="json"),
+    )
+
+def error_response(message: str, status_code: int = 400) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=APIResponse(status="error", message=message, data=None).model_dump(mode="json"),
+    )
 ```
 
 ### Route Registration
@@ -711,18 +825,61 @@ Public Routes:
   GET  /api/simulate/drift                → Drift hack simulation (adjustable params)
   POST /api/auth/verify                   → Verify wallet signature
 
-Protected Routes (Wallet Auth Middleware):
+Protected Routes (Wallet Auth Dependency):
   POST /api/protocols                     → Register protocol
   GET  /api/protocols                     → List protocols by guardian wallet
-  GET  /api/protocols/:id                 → Get protocol detail + invariants
-  POST /api/protocols/:id/invariants      → Add invariant rule
-  GET  /api/protocols/:id/invariants      → List invariant rules
-  POST /api/protocols/:id/resume          → Resume paused protocol
+  GET  /api/protocols/{id}                → Get protocol detail + invariants
+  POST /api/protocols/{id}/invariants     → Add invariant rule
+  GET  /api/protocols/{id}/invariants     → List invariant rules
+  POST /api/protocols/{id}/resume         → Resume paused protocol
 
 WebSocket:
   ws://host/ws?protocol_id=ID            → Real-time TX feed + evaluation + threat level
 ```
 
+### Configuration (pydantic-settings)
+
+```python
+# app/core/config.py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    # Server
+    app_port: int = 8000
+
+    # Database
+    postgres_user: str
+    postgres_password: str
+    postgres_db: str
+    db_host: str = "localhost"
+    db_port: int = 5432
+
+    # Solana
+    solana_rpc_url: str
+    solana_ws_url: str
+    guardian_program_id: str
+    sentinel_keypair: str
+
+    # Telegram
+    telegram_bot_token: str
+    telegram_chat_id: str
+
+    # CORS
+    allowed_origins: str = "http://localhost:3000"
+
+    @property
+    def database_url(self) -> str:
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.db_host}:{self.db_port}/{self.postgres_db}"
+        )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.allowed_origins.split(",")]
+```
 
 ## Correctness Properties
 
@@ -748,7 +905,7 @@ WebSocket:
 
 ### Property 4: Protocol Ownership Isolation
 
-*For any* set of protocols yang terdaftar oleh berbagai guardian wallets, mengakses atau me-list protocols dengan wallet tertentu SHALL hanya mengembalikan protocols yang guardian_wallet-nya cocok dengan wallet tersebut. Wallet yang bukan guardian dari protocol manapun SHALL ditolak oleh auth middleware.
+*For any* set of protocols yang terdaftar oleh berbagai guardian wallets, mengakses atau me-list protocols dengan wallet tertentu SHALL hanya mengembalikan protocols yang guardian_wallet-nya cocok dengan wallet tersebut. Wallet yang bukan guardian dari protocol manapun SHALL ditolak oleh auth dependency.
 
 **Validates: Requirements 4.4, 5.3**
 
@@ -766,13 +923,13 @@ WebSocket:
 
 ### Property 7: WITHDRAWAL_RATE Evaluation Correctness
 
-*For any* sequence of withdrawal transactions dalam sebuah time window dan threshold yang dikonfigurasi, Evaluator SHALL mengembalikan "breach" jika dan hanya jika total jumlah withdrawal melebihi threshold. Nilai `MeasuredValue` dalam hasil evaluasi SHALL sama dengan total jumlah withdrawal yang dihitung.
+*For any* sequence of withdrawal transactions dalam sebuah time window dan threshold yang dikonfigurasi, Evaluator SHALL mengembalikan "breach" jika dan hanya jika total jumlah withdrawal melebihi threshold. Nilai `measured_value` dalam hasil evaluasi SHALL sama dengan total jumlah withdrawal yang dihitung.
 
 **Validates: Requirements 8.2**
 
 ### Property 8: TVL_DROP Evaluation Correctness
 
-*For any* nilai TVL awal dan sequence of value changes dalam sebuah time window, Evaluator SHALL mengembalikan "breach" jika dan hanya jika persentase penurunan TVL melebihi threshold yang dikonfigurasi. Nilai `MeasuredValue` SHALL sama dengan persentase penurunan yang dihitung.
+*For any* nilai TVL awal dan sequence of value changes dalam sebuah time window, Evaluator SHALL mengembalikan "breach" jika dan hanya jika persentase penurunan TVL melebihi threshold yang dikonfigurasi. Nilai `measured_value` SHALL sama dengan persentase penurunan yang dihitung.
 
 **Validates: Requirements 8.3**
 
@@ -813,40 +970,31 @@ WebSocket:
 
 ## Error Handling
 
-### Error Types
+### Error Strategy
 
-Semua error internal menggunakan `AppError` type dari `pkg/error.go`:
+Semua error menggunakan FastAPI `HTTPException` dan custom exception handlers:
 
-```go
-// pkg/error.go
-type AppError struct {
-    StatusCode int    `json:"status_code"`
-    Message    string `json:"message"`
-    Details    string `json:"details,omitempty"`
-}
+```python
+# app/core/exceptions.py
+from fastapi import HTTPException
 
-func (e *AppError) Error() string {
-    return e.Message
-}
-
-func NewAppError(statusCode int, message string) *AppError {
-    return &AppError{StatusCode: statusCode, Message: message}
-}
-
-func NewAppErrorWithDetails(statusCode int, message string, details string) *AppError {
-    return &AppError{StatusCode: statusCode, Message: message, Details: details}
-}
+class AppError(HTTPException):
+    """Custom application error with consistent structure."""
+    def __init__(self, status_code: int, message: str, details: str | None = None):
+        super().__init__(status_code=status_code, detail=message)
+        self.message = message
+        self.details = details
 ```
 
 ### Error Handling Strategy per Layer
 
 | Layer | Strategy | Contoh |
 |-------|----------|--------|
-| **Handler** | Parse request → validate → call service → return response envelope | Validation error → 400, service error → forward AppError |
-| **Service** | Business logic validation → call repo/client → wrap errors as AppError | Duplicate protocol → AppError(409), not found → AppError(404) |
-| **Repository** | Database operations → wrap GORM errors | Record not found → AppError(404), unique constraint → AppError(409) |
-| **Client** | External service calls → wrap errors with context | Geyser disconnect → log + reconnect, Solana TX fail → AppError(502) |
-| **Middleware** | Auth validation → return 401 if invalid | Missing wallet header → 401, wallet not guardian → 401 |
+| **Route** | Pydantic auto-validates → call service → return response envelope | Validation error → 422 (auto), service error → forward HTTPException |
+| **Service** | Business logic validation → call repo/client → raise HTTPException | Duplicate protocol → HTTPException(409), not found → HTTPException(404) |
+| **Repository** | Database operations → wrap SQLAlchemy errors | Record not found → HTTPException(404), unique constraint → HTTPException(409) |
+| **Client** | External service calls → wrap errors with context | Geyser disconnect → log + reconnect, Solana TX fail → HTTPException(502) |
+| **Dependency** | Auth validation → raise HTTPException(401) | Missing wallet header → 401, wallet not guardian → 401 |
 
 ### Error Recovery
 
@@ -856,8 +1004,8 @@ func NewAppErrorWithDetails(statusCode int, message string, details string) *App
 | **Circuit Breaker** | On-chain TX gagal | Log error + dispatch emergency Telegram alert (Req 10.5) |
 | **Telegram Client** | API call gagal | Log failure (Req 11.4), tidak retry — lanjut proses |
 | **Evaluator** | DB query gagal | Return error → Sentinel logs + skip TX (don't crash) |
-| **WebSocket Hub** | Client disconnect | Remove dari map + release resources (Req 12.4) |
-| **Handler** | Panic recovery | Fiber recover middleware → log + return 500 |
+| **WebSocket Manager** | Client disconnect | Remove dari connections dict + release resources (Req 12.4) |
+| **Route Handler** | Unhandled exception | FastAPI exception handler → log + return 500 |
 
 ### HTTP Status Code Mapping
 
@@ -869,16 +1017,30 @@ func NewAppErrorWithDetails(statusCode int, message string, details string) *App
 | **401** | Auth errors (invalid signature, wallet bukan guardian) |
 | **404** | Resource not found |
 | **409** | Conflict (duplicate program_address) |
+| **422** | Pydantic validation errors (auto dari FastAPI) |
 | **500** | Internal server errors |
 
 ### Logging Strategy
 
-Menggunakan structured logging (Go `log/slog`) dengan level:
+Menggunakan Python `logging` module dengan structured logging:
+
+```python
+# app/core/logging.py
+import logging
+import sys
+
+def setup_logging(level: str = "INFO") -> None:
+    logging.basicConfig(
+        level=getattr(logging, level.upper()),
+        format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+```
 
 | Level | Kapan Digunakan |
 |-------|----------------|
-| **ERROR** | Circuit breaker gagal, Telegram dispatch gagal, unhandled panic |
-| **WARN** | Geyser reconnect, invariant evaluation warning (mendekati threshold) |
+| **ERROR** | Circuit breaker gagal, Telegram dispatch gagal, unhandled exception |
+| **WARNING** | Geyser reconnect, invariant evaluation warning (mendekati threshold) |
 | **INFO** | Server start/stop, protocol registered, breach detected, incident created, alert sent, Geyser connected |
 | **DEBUG** | Setiap TX dievaluasi, WebSocket client connect/disconnect, threat level changes |
 
@@ -894,29 +1056,29 @@ Testing menggunakan kombinasi **unit tests** dan **property-based tests** untuk 
 
 ### Property-Based Testing
 
-**Library**: [rapid](https://github.com/flyingmutant/rapid) — property-based testing library untuk Go
+**Library**: [hypothesis](https://hypothesis.readthedocs.io/) — property-based testing library untuk Python
 
-**Konfigurasi**: Minimum 100 iterasi per property test
+**Konfigurasi**: Minimum 100 iterasi per property test (`@settings(max_examples=100)`)
 
 **Tag format**: `Feature: killswitch-backend, Property {number}: {property_text}`
 
-Property-based tests akan diimplementasikan untuk semua 13 correctness properties yang didefinisikan di atas. Setiap property test menggunakan generator untuk menghasilkan input acak dan memverifikasi bahwa property berlaku untuk semua input tersebut.
+Property-based tests akan diimplementasikan untuk semua 13 correctness properties yang didefinisikan di atas. Setiap property test menggunakan `@given()` decorator dengan strategies untuk menghasilkan input acak dan memverifikasi bahwa property berlaku untuk semua input tersebut.
 
 ### Test Coverage per Komponen
 
 | Komponen | Unit Tests | Property Tests | Integration Tests |
 |----------|-----------|---------------|-------------------|
-| **Config Loader** | Missing var error messages | Property 1: missing var identification | — |
-| **Entities** | Field mapping, associations | Property 2: DB round-trip (Protocol, Invariant, Incident) | DB migration smoke test |
-| **Auth Handler** | Specific valid/invalid signatures | Property 3: ed25519 verification | — |
-| **Auth Middleware** | Specific wallet scenarios | Property 4: ownership isolation | — |
+| **Config (Settings)** | Missing var error messages | Property 1: missing var identification | — |
+| **Models** | Field mapping, relationships | Property 2: DB round-trip (Protocol, Invariant, Incident) | DB migration smoke test |
+| **Auth Route** | Specific valid/invalid signatures | Property 3: ed25519 verification | — |
+| **Auth Dependency** | Specific wallet scenarios | Property 4: ownership isolation | — |
 | **Protocol Service** | CRUD operations, error cases | Property 4: ownership isolation, Property 5: address uniqueness | — |
 | **Invariant Service** | Create + list operations | Property 6: input validation (type + threshold) | — |
 | **Evaluator** | Specific breach/pass scenarios, admin/parameter detection | Property 7: withdrawal rate, Property 8: TVL drop, Property 9: single TX size, Property 10: severity escalation | — |
 | **Telegram Dispatcher** | Format verification, failure handling | Property 11: message completeness (normal + escalation) | Telegram API integration |
 | **Simulator** | Timeline completeness, default params | Property 12: output correctness (damage calc + param override) | — |
 | **API Response** | Specific status codes | Property 13: envelope consistency | — |
-| **WebSocket Hub** | Connect/disconnect, broadcast | — | Connection lifecycle |
+| **WebSocket Manager** | Connect/disconnect, broadcast | — | Connection lifecycle |
 | **Geyser Client** | — | — | Connection, subscription, reconnect |
 | **Circuit Breaker** | — | — | On-chain TX mock |
 | **Sentinel** | — | — | End-to-end flow mock |
@@ -925,14 +1087,44 @@ Property-based tests akan diimplementasikan untuk semua 13 correctness propertie
 
 Unit tests fokus pada:
 - **Contoh spesifik**: Skenario konkret (seed data, health check, default simulation)
-- **Edge cases**: Empty input, nil values, boundary values (threshold = 0)
+- **Edge cases**: Empty input, None values, boundary values (threshold = 0)
 - **Error conditions**: Invalid input, missing data, service failures, Telegram failures
 - **Detection logic**: Admin key change detection, parameter change detection
-- **Integration points**: Handler → Service → Repository wiring
+- **Integration points**: Route → Service → Repository wiring
 
 ### Test Infrastructure
 
-- **Database**: PostgreSQL test container atau SQLite in-memory untuk unit tests
-- **External services**: Mock semua external clients (Geyser, Solana RPC, Telegram) menggunakan interface-based mocking
-- **WebSocket**: Gunakan gorilla/websocket test utilities untuk WebSocket hub tests
-- **HTTP**: Gunakan Fiber test utilities (`app.Test()`) untuk handler tests
+- **Database**: PostgreSQL test container via `testcontainers-python` atau SQLite in-memory untuk unit tests
+- **External services**: Mock semua external clients (Geyser, Solana RPC, Telegram) menggunakan `unittest.mock` atau `pytest-mock`
+- **WebSocket**: Gunakan `httpx` + FastAPI `TestClient` untuk WebSocket tests
+- **HTTP**: Gunakan FastAPI `TestClient` (berbasis httpx) untuk route tests
+- **Fixtures**: pytest fixtures untuk database session, mock clients, dan test data
+- **Async**: `pytest-asyncio` untuk testing async functions
+
+### Contoh Test Structure
+
+```python
+# tests/test_evaluator.py
+import pytest
+from hypothesis import given, settings, strategies as st
+
+@settings(max_examples=100)
+@given(
+    amounts=st.lists(st.floats(min_value=0, max_value=1e9), min_size=1, max_size=20),
+    threshold=st.floats(min_value=1, max_value=1e9),
+)
+def test_withdrawal_rate_breach_iff_total_exceeds_threshold(amounts, threshold):
+    """Feature: killswitch-backend, Property 7: WITHDRAWAL_RATE Evaluation Correctness"""
+    # Arrange
+    total = sum(amounts)
+    
+    # Act
+    result = evaluate_withdrawal_rate(amounts, threshold)
+    
+    # Assert
+    if total > threshold:
+        assert result.status == "breach"
+        assert result.measured_value == pytest.approx(total)
+    else:
+        assert result.status == "pass"
+```

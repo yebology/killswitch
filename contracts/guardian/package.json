@@ -1,0 +1,21 @@
+{
+  "name": "killswitch-guardian",
+  "version": "0.1.0",
+  "description": "Killswitch Guardian Program — Anchor tests",
+  "scripts": {
+    "test": "npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@solana/web3.js": "^1.95.0"
+  },
+  "devDependencies": {
+    "chai": "^4.4.1",
+    "@types/chai": "^4.3.11",
+    "mocha": "^10.7.0",
+    "@types/mocha": "^10.0.6",
+    "ts-mocha": "^10.0.0",
+    "typescript": "^5.3.3",
+    "fast-check": "^3.15.0"
+  }
+}

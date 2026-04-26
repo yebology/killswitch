@@ -1,0 +1,67 @@
+# Killswitch — Docker Compose (PostgreSQL + Backend + Frontend)
+# Usage: docker compose up -d
+
+services:
+  # --- PostgreSQL Database ---
+  postgres:
+    image: postgres:16-alpine
+    container_name: killswitch-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: killswitch
+      POSTGRES_PASSWORD: killswitch_secret
+      POSTGRES_DB: killswitch_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U killswitch -d killswitch_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Backend (Python + FastAPI) ---
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: killswitch-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      APP_PORT: 8000
+      POSTGRES_USER: killswitch
+      POSTGRES_PASSWORD: killswitch_secret
+      POSTGRES_DB: killswitch_db
+      DB_HOST: postgres
+      DB_PORT: 5432
+      SOLANA_RPC_URL: https://api.devnet.solana.com
+      SOLANA_WS_URL: wss://api.devnet.solana.com
+      GUARDIAN_PROGRAM_ID: 8uSSf1TnE6Bqz1qGt3uZVAwU5Za9f1Sgp7sxtBQJ5HyJ
+      SENTINEL_KEYPAIR: "[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64]"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-placeholder}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:--1001234567890}"
+      ALLOWED_ORIGINS: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # --- Frontend (Next.js) ---
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+        NEXT_PUBLIC_WS_URL: ws://localhost:8000
+    container_name: killswitch-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
