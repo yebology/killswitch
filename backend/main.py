@@ -13,9 +13,6 @@ from app.clients.solana import SolanaClient
 from app.clients.telegram import TelegramClient
 from app.core.config import Settings
 from app.core.database import Base, init_db
-from app.repositories.incident import IncidentRepository
-from app.repositories.invariant import InvariantRepository
-from app.repositories.protocol import ProtocolRepository
 from app.services.circuit_breaker import CircuitBreakerService
 from app.services.evaluator import EvaluatorService
 from app.services.sentinel import SentinelService
@@ -67,42 +64,37 @@ async def lifespan(app: FastAPI):
     )
     telegram_client = TelegramClient(bot_token=settings.telegram_bot_token)
 
-    # Initialize services (using a fresh session for sentinel)
+    # Initialize services — pass session_factory so Sentinel creates fresh
+    # sessions per-transaction (avoids stale/closed session issues)
     from app.core.database import async_session_factory
 
-    async with async_session_factory() as session:
-        protocol_repo = ProtocolRepository(session)
-        invariant_repo = InvariantRepository(session)
-        incident_repo = IncidentRepository(session)
+    evaluator = EvaluatorService(session_factory=async_session_factory)
+    telegram_dispatcher = TelegramDispatcher(
+        telegram_client=telegram_client,
+        default_chat_id=settings.telegram_chat_id,
+    )
+    circuit_breaker = CircuitBreakerService(
+        solana_client=solana_client,
+        session_factory=async_session_factory,
+        telegram_dispatcher=telegram_dispatcher,
+    )
 
-        evaluator = EvaluatorService(invariant_repo=invariant_repo)
-        telegram_dispatcher = TelegramDispatcher(
-            telegram_client=telegram_client,
-            default_chat_id=settings.telegram_chat_id,
-        )
-        circuit_breaker = CircuitBreakerService(
-            solana_client=solana_client,
-            protocol_repo=protocol_repo,
-            incident_repo=incident_repo,
-            telegram_dispatcher=telegram_dispatcher,
-        )
+    _sentinel = SentinelService(
+        geyser_client=geyser_client,
+        evaluator=evaluator,
+        circuit_breaker=circuit_breaker,
+        telegram_dispatcher=telegram_dispatcher,
+        ws_manager=ws_manager,
+        session_factory=async_session_factory,
+    )
 
-        _sentinel = SentinelService(
-            geyser_client=geyser_client,
-            evaluator=evaluator,
-            circuit_breaker=circuit_breaker,
-            telegram_dispatcher=telegram_dispatcher,
-            ws_manager=ws_manager,
-            protocol_repo=protocol_repo,
-        )
+    # Start sentinel monitoring
+    await _sentinel.start()
+    logger.info("Sentinel service started")
 
-        # Start sentinel monitoring
-        await _sentinel.start()
-        logger.info("Sentinel service started")
-
-        # Set sentinel reference for internal inject endpoint (demo)
-        from app.api.routes.internal import set_sentinel_ref
-        set_sentinel_ref(_sentinel)
+    # Set sentinel reference for internal inject endpoint (demo)
+    from app.api.routes.internal import set_sentinel_ref
+    set_sentinel_ref(_sentinel)
 
     yield
 

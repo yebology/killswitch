@@ -12,7 +12,7 @@ node_modules/
 out/
 
 # Environment
-.env
+.env.*
 .env.local
 
 # IDE
@@ -31,3 +31,11 @@ contracts/guardian/.anchor/
 
 # Personal notes
 EXPLAIN.md
+PROGRESS.md
+POST_HACKATHON.md
+RESEARCH.md
+CONCEPT.md
+
+# Keypairs (secrets)
+sentinel-keypair.json
+*-keypair.json

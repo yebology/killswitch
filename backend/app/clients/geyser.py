@@ -123,22 +123,18 @@ class GeyserClient:
                 await asyncio.sleep(self.RECONNECT_DELAY)
 
     async def _mock_loop(self) -> None:
-        """Generate fake transactions for demo/development."""
+        """Generate fake transactions for demo/development.
+        
+        Only generates normal transfers with small amounts to keep
+        the dashboard active without triggering breaches.
+        Use the attack simulator script for breach demos.
+        """
         import random
         import uuid
 
-        instruction_types = [
-            "transfer",
-            "transfer",
-            "transfer",
-            "transfer",
-            "admin_change",
-            "parameter_change",
-        ]
-
         while self._running:
             try:
-                await asyncio.sleep(3)  # Emit a fake TX every 3 seconds
+                await asyncio.sleep(5)  # Emit a fake TX every 5 seconds
                 if not self._subscriptions or not self._callback:
                     continue
 
@@ -146,15 +142,15 @@ class GeyserClient:
                 tx = ParsedTransaction(
                     hash=uuid.uuid4().hex[:64],
                     program_address=program,
-                    instruction_type=random.choice(instruction_types),
-                    amount=random.uniform(100, 2_000_000),
+                    instruction_type="transfer",
+                    amount=random.uniform(1_000, 500_000),  # Small amounts, won't breach $5M threshold
                     accounts=[
                         uuid.uuid4().hex[:44],
                         uuid.uuid4().hex[:44],
                     ],
                     timestamp=datetime.now(timezone.utc),
                 )
-                logger.debug("Mock TX: %s %.2f", tx.instruction_type, tx.amount)
+                logger.debug("Mock TX: %s $%.0f", tx.instruction_type, tx.amount)
                 await self._callback(tx)
 
             except asyncio.CancelledError:

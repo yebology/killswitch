@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import Awaitable, Callable
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.clients.geyser import ParsedTransaction
 from app.constants import (
     THREAT_LEVEL_CRITICAL,
@@ -57,13 +59,15 @@ class EvaluatorService:
     Strategy pattern maps each invariant type to an async evaluation function.
     After evaluating all rules, calculates combined threat level and determines
     whether to escalate.
+
+    Uses session_factory to create fresh DB sessions per evaluation call.
     """
 
     # Warning threshold: measured value > 50% of configured threshold
     WARNING_RATIO = 0.5
 
-    def __init__(self, invariant_repo: InvariantRepository):
-        self.invariant_repo = invariant_repo
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]):
+        self.session_factory = session_factory
         self.strategies: dict[str, EvaluationStrategy] = {
             "WITHDRAWAL_RATE": self._eval_withdrawal_rate,
             "TVL_DROP": self._eval_tvl_drop,
@@ -75,9 +79,13 @@ class EvaluatorService:
     ) -> EvaluationResult:
         """Evaluate a transaction against all enabled invariant rules.
 
+        Creates a fresh session to fetch invariants, then evaluates.
         Returns an EvaluationResult with combined threat level and action.
         """
-        invariants = await self.invariant_repo.find_enabled_by_protocol_id(protocol_id)
+        async with self.session_factory() as session:
+            invariant_repo = InvariantRepository(session)
+            invariants = await invariant_repo.find_enabled_by_protocol_id(protocol_id)
+
         if not invariants:
             return EvaluationResult(
                 status="pass", threat_level=THREAT_LEVEL_LOW
@@ -227,16 +235,25 @@ class EvaluatorService:
     ) -> RuleResult:
         """Evaluate TVL_DROP: estimate TVL impact from transaction.
 
-        In production, this would track TVL over the time window.
-        For MVP, we use the TX amount as a percentage proxy.
+        Converts the withdrawal amount to a percentage of estimated protocol TVL.
+        Threshold is in percentage (e.g., 10 = 10% drop).
+        For MVP, we assume a baseline TVL of $50M per protocol.
         """
-        measured = tx.amount if tx.instruction_type == "transfer" else 0.0
-        status = self._classify(measured, inv.threshold)
+        # Estimated protocol TVL (in production, this would be fetched from on-chain)
+        ESTIMATED_TVL = 50_000_000.0  # $50M baseline
+
+        if tx.instruction_type == "transfer" and tx.amount > 0:
+            # Convert amount to percentage of TVL
+            measured_pct = (tx.amount / ESTIMATED_TVL) * 100.0
+        else:
+            measured_pct = 0.0
+
+        status = self._classify(measured_pct, inv.threshold)
         return RuleResult(
             invariant_id=inv.id,
             invariant_type=inv.type,
             status=status,
-            measured_value=measured,
+            measured_value=measured_pct,
             threshold=inv.threshold,
         )
 

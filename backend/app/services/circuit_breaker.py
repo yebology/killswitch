@@ -4,6 +4,8 @@ import logging
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
 from app.clients.solana import SolanaClient
 from app.constants import PROTOCOL_STATUS_ACTIVE, PROTOCOL_STATUS_PAUSED
 from app.repositories.incident import IncidentRepository
@@ -14,18 +16,19 @@ logger = logging.getLogger(__name__)
 
 
 class CircuitBreakerService:
-    """Triggers on-chain pause/resume and records incidents."""
+    """Triggers on-chain pause/resume and records incidents.
+
+    Uses session_factory to create fresh DB sessions per operation.
+    """
 
     def __init__(
         self,
         solana_client: SolanaClient,
-        protocol_repo: ProtocolRepository,
-        incident_repo: IncidentRepository,
+        session_factory: async_sessionmaker[AsyncSession],
         telegram_dispatcher=None,
     ):
         self.solana_client = solana_client
-        self.protocol_repo = protocol_repo
-        self.incident_repo = incident_repo
+        self.session_factory = session_factory
         self.telegram_dispatcher = telegram_dispatcher
 
     async def trigger_pause(
@@ -58,28 +61,39 @@ class CircuitBreakerService:
                     chat_id=telegram_chat_id,
                     message=f"EMERGENCY: Failed to pause {protocol_name} on-chain!",
                 )
-            return
+            # Still update DB status even if on-chain TX fails (for demo)
+            # This ensures the UI shows paused state
 
-        # Update protocol status in DB
-        await self.protocol_repo.update_status(protocol_id, PROTOCOL_STATUS_PAUSED)
+        # Update protocol status in DB and create incident
+        async with self.session_factory() as session:
+            protocol_repo = ProtocolRepository(session)
+            incident_repo = IncidentRepository(session)
 
-        # Create incident record
-        from app.models.incident import Incident
+            await protocol_repo.update_status(protocol_id, PROTOCOL_STATUS_PAUSED)
 
-        primary_rule = result.breached_rules[0] if result.breached_rules else None
-        incident = Incident(
-            protocol_id=protocol_id,
-            invariant_id=primary_rule.invariant_id if primary_rule else protocol_id,
-            trigger_time=datetime.now(timezone.utc),
-            tx_hashes=tx_hashes,
-            action_taken="pause",
-            damage_estimate=primary_rule.measured_value if primary_rule else 0.0,
-            escalation_reason=result.escalation_reason,
-        )
-        await self.incident_repo.create(incident)
+            # Create incident record
+            from app.models.incident import Incident
+
+            primary_rule = result.breached_rules[0] if result.breached_rules else None
+            incident = Incident(
+                protocol_id=protocol_id,
+                invariant_id=primary_rule.invariant_id if primary_rule else protocol_id,
+                trigger_time=datetime.now(timezone.utc),
+                tx_hashes=tx_hashes,
+                action_taken="pause",
+                damage_estimate=primary_rule.measured_value if primary_rule else 0.0,
+                escalation_reason=result.escalation_reason,
+            )
+            await incident_repo.create(incident)
+
+        logger.info("Protocol %s paused and incident recorded", protocol_name)
 
     async def resume(self, protocol_id: UUID, program_address: str) -> None:
         """Resume a paused protocol on-chain and update DB status."""
         await self.solana_client.resume(program_address)
-        await self.protocol_repo.update_status(protocol_id, PROTOCOL_STATUS_ACTIVE)
+
+        async with self.session_factory() as session:
+            protocol_repo = ProtocolRepository(session)
+            await protocol_repo.update_status(protocol_id, PROTOCOL_STATUS_ACTIVE)
+
         logger.info("Protocol %s resumed", protocol_id)

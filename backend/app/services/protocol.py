@@ -54,7 +54,16 @@ class ProtocolService:
             created.program_address,
             guardian_wallet,
         )
-        return ProtocolResponse.model_validate(created)
+        return ProtocolResponse(
+            id=created.id,
+            program_address=created.program_address,
+            name=created.name,
+            guardian_wallet=created.guardian_wallet,
+            telegram_chat_id=created.telegram_chat_id,
+            status=created.status,
+            created_at=created.created_at,
+            invariants=[],
+        )
 
     async def get_protocol(
         self, protocol_id: UUID, guardian_wallet: str

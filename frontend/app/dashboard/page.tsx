@@ -85,8 +85,9 @@ export default function DashboardPage() {
     escalationReason,
   } = useWebSocket(protocol?.id, !!protocol);
 
-  // Use WebSocket protocol status if available, otherwise fall back to fetched status
-  const currentStatus = protocol ? (protocolStatus ?? protocol.status) : "active";
+  // Use fetched protocol status as source of truth
+  // WebSocket status_change will update protocol state directly
+  const currentStatus = protocol?.status ?? "active";
 
   // Route protection is handled by AuthProvider
   if (!isAuthenticated) {

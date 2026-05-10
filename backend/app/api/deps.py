@@ -17,13 +17,11 @@ from app.core.database import get_session
 from app.repositories.incident import IncidentRepository
 from app.repositories.invariant import InvariantRepository
 from app.repositories.protocol import ProtocolRepository
-from app.services.circuit_breaker import CircuitBreakerService
 from app.services.evaluator import EvaluatorService
 from app.services.incident import IncidentService
 from app.services.invariant import InvariantService
 from app.services.protocol import ProtocolService
 from app.services.simulator import SimulatorService
-from app.services.telegram import TelegramDispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +101,8 @@ def get_evaluator_service(
     session: AsyncSession = Depends(get_db_session),
 ) -> EvaluatorService:
     """Create an EvaluatorService with injected dependencies."""
-    invariant_repo = InvariantRepository(session)
-    return EvaluatorService(invariant_repo=invariant_repo)
+    from app.core.database import async_session_factory
+    return EvaluatorService(session_factory=async_session_factory)
 
 
 def get_simulator_service() -> SimulatorService:

@@ -93,6 +93,12 @@ async def resume_protocol(
     """
     try:
         protocol = await service.resume_protocol(protocol_id, wallet)
+
+        # Notify sentinel to set cooldown (prevent immediate re-pause from mock TXs)
+        from app.api.routes.internal import _sentinel_ref
+        if _sentinel_ref:
+            _sentinel_ref.mark_resumed(protocol.program_address)
+
         return success_response(
             data=protocol.model_dump(mode="json"),
             message=MSG_PROTOCOL_RESUMED,

@@ -109,11 +109,48 @@ export default function ProtocolDetailPage() {
   };
 
   /** Handle resume protocol. */
-  const handleResume = () => {
-    setProtocol((prev) => {
-      if (!prev) return prev;
-      return { ...prev, status: "active" };
-    });
+  const [isResuming, setIsResuming] = useState(false);
+  const handleResume = async () => {
+    if (!protocol) return;
+    setIsResuming(true);
+    try {
+      const { post } = await import("@/lib/api");
+      await post(`/api/protocols/${protocol.id}/resume`, {});
+      setProtocol((prev) => {
+        if (!prev) return prev;
+        return { ...prev, status: "active" };
+      });
+    } catch (err) {
+      console.error("Resume failed:", err);
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  /** Run attack test — injects fake attack transactions to trigger pause + Telegram alert. */
+  const [isAttacking, setIsAttacking] = useState(false);
+  const [attackResult, setAttackResult] = useState<"success" | "error" | null>(null);
+  const handleAttackTest = async () => {
+    if (!protocol) return;
+    setIsAttacking(true);
+    setAttackResult(null);
+    try {
+      const { post } = await import("@/lib/api");
+      await post("/api/_internal/attack_test", {
+        program_address: protocol.program_address,
+      });
+      // Attack completed — protocol should now be paused
+      setProtocol((prev) => {
+        if (!prev) return prev;
+        return { ...prev, status: "paused" };
+      });
+      setAttackResult("success");
+    } catch (err) {
+      console.error("Attack test failed:", err);
+      setAttackResult("error");
+    } finally {
+      setIsAttacking(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -261,11 +298,48 @@ export default function ProtocolDetailPage() {
         {protocol.status === "paused" && (
           <Button
             onClick={handleResume}
-            className="bg-status-green text-white hover:bg-status-green/90"
+            disabled={isResuming}
+            className="bg-status-green text-white hover:bg-status-green/90 disabled:opacity-50"
             size="lg"
           >
-            Resume Protocol
+            {isResuming ? "Resuming..." : "Resume Protocol"}
           </Button>
+        )}
+
+        {/* Attack Test button — fire drill for your protocol */}
+        {protocol.status === "active" && (
+          <button
+            onClick={handleAttackTest}
+            disabled={isAttacking}
+            className="w-full rounded-lg border border-status-red/30 bg-status-red/10 px-4 py-3 text-sm font-medium text-status-red hover:bg-status-red/20 disabled:opacity-50 transition-colors"
+          >
+            {isAttacking ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Running Attack Test...
+              </span>
+            ) : (
+              "🚨 Run Attack Test — Simulate Drift-like exploit"
+            )}
+          </button>
+        )}
+
+        {/* Attack result banner */}
+        {attackResult === "success" && (
+          <div className="rounded-lg border border-status-red/50 bg-status-red/10 p-4 space-y-2">
+            <p className="text-sm font-bold text-status-red">🛑 Attack Detected — Protocol Paused!</p>
+            <p className="text-xs text-status-red/80">
+              Killswitch detected a Drift-like exploit pattern (admin key change + parameter modification + rapid withdrawals) and automatically paused your protocol. Check your Telegram for the full alert.
+            </p>
+          </div>
+        )}
+        {attackResult === "error" && (
+          <div className="rounded-lg border border-status-yellow/50 bg-status-yellow/10 p-4">
+            <p className="text-sm text-status-yellow">⚠️ Attack test failed — check backend logs.</p>
+          </div>
         )}
       </div>
 

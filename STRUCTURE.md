@@ -1,6 +1,6 @@
 # Killswitch — Project Structure
 
-Struktur folder mengikuti pola clean architecture yang sama dengan Miora.
+Backend menggunakan Python + FastAPI dengan clean architecture pattern.
 
 ---
 
@@ -8,272 +8,220 @@ Struktur folder mengikuti pola clean architecture yang sama dengan Miora.
 killswitch/
 ├── backend/
 │   ├── app/
-│   │   ├── clients/            # External service clients
-│   │   │   ├── geyser.go       # Solana Geyser/WebSocket TX stream listener
-│   │   │   ├── solana.go       # Solana RPC client (send transactions, read accounts)
-│   │   │   └── telegram.go     # Telegram Bot API client for alerts
+│   │   ├── api/                    # API layer
+│   │   │   ├── __init__.py
+│   │   │   ├── deps.py            # FastAPI dependencies (DI, auth, session)
+│   │   │   ├── middleware.py      # CORS setup + exception handlers
+│   │   │   ├── response.py       # Standardized JSON response envelope
+│   │   │   └── routes/
+│   │   │       ├── __init__.py    # Route aggregator (prefix /api)
+│   │   │       ├── auth.py       # POST /api/auth/verify — wallet signature verification
+│   │   │       ├── health.py     # GET /api/health — health check
+│   │   │       ├── internal.py   # POST /api/_internal/attack_test, inject_tx (demo only)
+│   │   │       ├── invariant.py  # POST /api/protocols/:id/invariants — add rule
+│   │   │       ├── protocol.py   # CRUD protocols + resume
+│   │   │       └── simulate.py   # GET /api/simulate/drift — Drift hack replay
 │   │   │
-│   │   ├── dto/
-│   │   │   ├── requests/
-│   │   │   │   ├── protocol.go     # Register protocol request
-│   │   │   │   ├── invariant.go    # Create/update invariant request
-│   │   │   │   └── alert.go        # Alert config request
-│   │   │   └── responses/
-│   │   │       ├── protocol.go     # Protocol status response
-│   │   │       ├── invariant.go    # Invariant evaluation response
-│   │   │       └── incident.go     # Incident timeline response
+│   │   ├── clients/               # External service clients
+│   │   │   ├── geyser.py         # Solana TX stream (WebSocket, mock mode for demo)
+│   │   │   ├── solana.py         # Solana RPC client (trigger_pause, resume stubs)
+│   │   │   └── telegram.py       # Telegram Bot API client (httpx async)
 │   │   │
-│   │   ├── entities/           # Database models (GORM)
-│   │   │   ├── protocol.go    # Registered protocol (address, name, guardian key, telegram_chat_id, status)
-│   │   │   ├── invariant.go   # Invariant rule (type, threshold, time_window, protocol_id)
-│   │   │   └── incident.go    # Incident log (trigger_time, invariant_id, tx_hashes, action_taken, escalation_reason)
+│   │   ├── core/                  # Application core
+│   │   │   ├── config.py         # Pydantic Settings — loads .env
+│   │   │   ├── database.py       # SQLAlchemy async engine + session factory
+│   │   │   ├── exceptions.py     # AppError class
+│   │   │   └── security.py       # Ed25519 signature verification
 │   │   │
-│   │   ├── handlers/           # HTTP request handlers
-│   │   │   ├── protocol.go    # Register/get/list protocols
-│   │   │   ├── invariant.go   # Add/list invariants
-│   │   │   ├── simulate.go    # Run Drift hack replay
-│   │   │   └── auth.go        # Verify wallet signature
+│   │   ├── models/                # SQLAlchemy ORM models
+│   │   │   ├── protocol.py       # Protocol: program_address, name, guardian_wallet, status, telegram_chat_id
+│   │   │   ├── invariant.py      # Invariant: type, threshold, time_window, action, enabled
+│   │   │   └── incident.py       # Incident: trigger_time, tx_hashes, action_taken, damage_estimate, escalation_reason
 │   │   │
-│   │   ├── http/               # Route registration per domain
-│   │   │   ├── protocol.go
-│   │   │   ├── invariant.go
-│   │   │   ├── simulate.go
-│   │   │   └── auth.go
+│   │   ├── repositories/          # Database access layer (async)
+│   │   │   ├── protocol.py       # find_by_id, find_by_program_address, find_all_active, update_status
+│   │   │   ├── invariant.py      # find_enabled_by_protocol_id, create
+│   │   │   └── incident.py       # create, find_by_protocol_id
 │   │   │
-│   │   ├── interfaces/         # Service & repository contracts
-│   │   │   ├── solana.go      # ISolanaClient interface
-│   │   │   ├── geyser.go     # IGeyserClient interface
-│   │   │   ├── protocol.go    # IProtocolRepository interface
-│   │   │   ├── invariant.go   # IInvariantRepository interface
-│   │   │   └── incident.go    # IIncidentRepository interface
+│   │   ├── schemas/               # Pydantic request/response schemas
+│   │   │   ├── requests.py       # RegisterProtocolRequest, CreateInvariantRequest, SimulationParams
+│   │   │   └── responses.py      # ProtocolResponse, InvariantResponse, SimulationResult
 │   │   │
-│   │   ├── middleware/
-│   │   │   └── auth.go        # API key auth middleware (for dashboard)
+│   │   ├── services/              # Business logic
+│   │   │   ├── sentinel.py       # Core orchestrator: TX stream → evaluate → trigger actions
+│   │   │   ├── evaluator.py      # Invariant evaluation engine + severity escalation
+│   │   │   ├── circuit_breaker.py # On-chain pause/resume + incident recording
+│   │   │   ├── telegram.py       # Alert message formatting + dispatch
+│   │   │   ├── protocol.py       # Protocol registration + management
+│   │   │   ├── invariant.py      # Invariant CRUD + validation
+│   │   │   ├── incident.py       # Incident queries
+│   │   │   └── simulator.py      # Drift hack replay engine (hardcoded timeline)
 │   │   │
-│   │   ├── output/             # Standardized API response envelope
-│   │   │   └── response.go
+│   │   ├── ws/                    # WebSocket real-time updates
+│   │   │   ├── manager.py        # WebSocketManager — connection tracking + broadcast
+│   │   │   └── routes.py         # ws://host/ws?protocol_id=ID
 │   │   │
-│   │   ├── repositories/       # Database access layer
-│   │   │   ├── protocol.go
-│   │   │   ├── invariant.go
-│   │   │   └── incident.go
-│   │   │
-│   │   ├── services/           # Business logic
-│   │   │   ├── sentinel.go        # Core: TX stream → evaluate invariants → trigger actions
-│   │   │   ├── evaluator.go       # Invariant evaluation engine + severity escalation
-│   │   │   ├── circuit_breaker.go # Trigger on-chain pause via guardian program
-│   │   │   ├── telegram.go        # Dispatch alerts via Telegram Bot API
-│   │   │   ├── protocol.go        # Protocol registration + management
-│   │   │   ├── invariant.go       # Invariant add + validation
-│   │   │   ├── incident.go        # Incident logging
-│   │   │   └── simulator.go       # Drift hack replay simulation
-│   │   │
-│   │   └── ws/                 # WebSocket hub (real-time dashboard updates)
-│   │       ├── hub.go
-│   │       └── handler.go
+│   │   └── constants.py           # Invariant types, protocol statuses, threat levels, messages
 │   │
-│   ├── cmd/
-│   │   ├── seed/
-│   │   │   └── main.go        # Seed DB with sample protocol + invariants
-│   │   └── simulate/
-│   │       └── main.go        # CLI: run Drift hack replay standalone
+│   ├── seeds/
+│   │   ├── __main__.py           # python -m seeds
+│   │   └── seed.py               # Seed DB with sample protocol + invariants
 │   │
-│   ├── config/
-│   │   └── config.go          # Env config loader (RPC URL, Geyser URL, DB, Telegram token)
+│   ├── scripts/
+│   │   └── simulate_attack.py    # CLI attack simulator (calls /api/_internal/inject_tx)
 │   │
-│   ├── constants/
-│   │   ├── invariants.go      # Invariant types (WITHDRAWAL_RATE, TVL_DROP, ADMIN_CHANGE, etc.)
-│   │   ├── error.go
-│   │   └── success.go
-│   │
-│   ├── migrations/
-│   │   ├── migrations.go      # Auto-migrate all entities
-│   │   └── seed.go            # Seed data for demo
-│   │
-│   ├── router/
-│   │   ├── container.go       # DI container: clients → repos → services → handlers
-│   │   └── routes.go          # Route setup + sentinel start
-│   │
-│   ├── utils/
-│   │   ├── helper.go
-│   │   └── math.go
-│   │
-│   ├── pkg/
-│   │   └── error.go           # AppError type
-│   │
-│   ├── main.go                # Entry point
-│   ├── Dockerfile
-│   ├── docker-compose.yml     # PostgreSQL
-│   ├── go.mod
-│   ├── go.sum
-│   └── .env
+│   ├── main.py                    # FastAPI app + lifespan (startup/shutdown)
+│   ├── requirements.txt           # Python dependencies
+│   ├── Dockerfile                 # Python 3.12 slim
+│   ├── Makefile
+│   └── .env                       # Environment variables
 │
 ├── frontend/
-│   ├── app/                    # Next.js App Router
-│   │   ├── page.tsx           # Landing page
+│   ├── app/                       # Next.js 16 App Router
+│   │   ├── page.tsx              # Landing page (hero, features, CTA)
+│   │   ├── layout.tsx            # Root layout (fonts, providers, navbar)
+│   │   ├── globals.css           # Tailwind CSS v4 + custom theme
 │   │   ├── dashboard/
-│   │   │   └── page.tsx       # Main monitoring dashboard
+│   │   │   └── page.tsx          # Main monitoring dashboard (threat level, invariant status)
 │   │   ├── protocols/
+│   │   │   ├── page.tsx          # Protocol list (cards with status)
 │   │   │   └── [id]/
-│   │   │       └── page.tsx   # Protocol detail + invariant config
-│   │   ├── simulate/
-│   │   │   └── page.tsx       # Drift hack replay page
-│   │   └── layout.tsx
+│   │   │       └── page.tsx      # Protocol detail + invariant rules + attack test button
+│   │   └── simulate/
+│   │       └── page.tsx          # Drift hack replay (timeline + controls + summary)
 │   │
 │   ├── components/
-│   │   ├── ui/                 # shadcn/ui components (button, card, badge, dialog, etc.)
+│   │   ├── ui/                    # shadcn/ui (button, card, badge, input, etc.)
 │   │   ├── layout/
-│   │   │   ├── navbar.tsx
-│   │   │   ├── sidebar.tsx
-│   │   │   └── footer.tsx
+│   │   │   └── navbar.tsx        # Top navbar (logo, nav links, wallet connect)
 │   │   ├── dashboard/
-│   │   │   ├── status-indicator.tsx    # Green/yellow/red protocol health + combined threat level
-│   │   │   ├── tx-feed.tsx             # Real-time transaction feed
-│   │   │   └── invariant-status.tsx    # Invariant check results (pass/warn/breach)
+│   │   │   ├── combined-threat-level.tsx  # Threat level indicator (LOW/ELEVATED/HIGH/CRITICAL)
+│   │   │   └── invariant-status.tsx       # Per-rule status bars
 │   │   ├── protocol/
-│   │   │   ├── register-form.tsx       # Register new protocol
-│   │   │   └── invariant-editor.tsx    # Add invariant rules
+│   │   │   ├── register-form.tsx          # Register new protocol form
+│   │   │   └── invariant-editor.tsx       # Add invariant rule form
 │   │   ├── simulate/
-│   │   │   ├── drift-replay.tsx        # Drift hack replay visualizer
-│   │   │   └── simulation-controls.tsx # Play/pause/speed controls
+│   │   │   └── drift-replay.tsx           # Drift hack replay visualizer
 │   │   └── providers/
-│   │       └── theme-provider.tsx
-│   │
-│   ├── constants/
-│   │   ├── invariant-types.ts  # Invariant type definitions + descriptions
-│   │   ├── nav.ts
-│   │   └── landing.ts
+│   │       ├── wallet-provider.tsx        # @solana/wallet-adapter setup
+│   │       └── auth-provider.tsx          # Wallet-based auth context
 │   │
 │   ├── hooks/
-│   │   ├── use-websocket.ts    # WebSocket hook for real-time dashboard
-│   │   └── use-simulation.ts   # Simulation playback hook
+│   │   └── use-websocket.ts      # WebSocket hook for real-time dashboard updates
 │   │
 │   ├── types/
-│   │   ├── protocol.ts
-│   │   ├── invariant.ts
-│   │   ├── incident.ts
-│   │   └── api.ts
+│   │   └── index.ts              # Protocol, Invariant, Incident, SimulationEvent types
+│   │
+│   ├── constants/
+│   │   └── index.ts              # INVARIANT_TYPES, NAV_ITEMS, LANDING content
 │   │
 │   ├── lib/
-│   │   ├── utils.ts
-│   │   └── api.ts              # API client (fetch wrapper)
-│   │
-│   ├── public/
-│   │   └── killswitch-logo.svg
+│   │   ├── api.ts                # Fetch wrapper (get, post with wallet header)
+│   │   └── utils.ts              # truncateAddress, getStatusColor, cn
 │   │
 │   ├── package.json
 │   ├── next.config.ts
 │   ├── tailwind.config.ts
 │   ├── tsconfig.json
+│   ├── Dockerfile
 │   └── .env
 │
 ├── contracts/
-│   └── guardian/                # Anchor program (Solana smart contract)
+│   └── guardian/                  # Anchor program (Solana smart contract)
 │       ├── programs/
 │       │   └── guardian/
 │       │       └── src/
-│       │           ├── lib.rs              # Program entry point
+│       │           ├── lib.rs              # Program entry: 6 instructions
 │       │           ├── instructions/
 │       │           │   ├── mod.rs
-│       │           │   ├── register_protocol.rs    # Register protocol + set guardian key
-│       │           │   ├── add_invariant.rs         # Add invariant rule to protocol
-│       │           │   ├── remove_invariant.rs      # Remove invariant rule
-│       │           │   ├── trigger_pause.rs         # Guardian triggers emergency pause
-│       │           │   ├── resume.rs                # Protocol owner resumes after review
-│       │           │   └── update_config.rs         # Update guardian config
+│       │           │   ├── register_protocol.rs
+│       │           │   ├── add_invariant.rs
+│       │           │   ├── remove_invariant.rs
+│       │           │   ├── trigger_pause.rs
+│       │           │   ├── resume.rs
+│       │           │   └── update_config.rs
 │       │           ├── state/
 │       │           │   ├── mod.rs
 │       │           │   ├── protocol_config.rs  # PDA: protocol address, guardian key, status
-│       │           │   └── invariant_rule.rs   # PDA: invariant type, threshold, time_window
+│       │           │   └── invariant_rule.rs   # PDA: type, threshold, time_window
 │       │           ├── error.rs            # Custom error codes
 │       │           └── constants.rs        # Seeds, limits
 │       │
 │       ├── tests/
-│       │   └── guardian.ts     # Anchor test suite
-│       │
-│       ├── migrations/
-│       │   └── deploy.ts
-│       │
+│       │   └── guardian.ts        # Anchor test suite (Mocha + Chai)
+│       ├── migrations/deploy.ts
 │       ├── Anchor.toml
 │       ├── Cargo.toml
 │       └── package.json
 │
-├── Makefile
+├── docker-compose.yml             # PostgreSQL (5434) + Backend (8002) + Frontend (3003)
+├── Makefile                       # make docker-up, make docker-down, make help
 ├── README.md
-├── KILLSWITCH_CONCEPT.md
+├── CONCEPT.md                     # Full concept document
+├── USER_FLOW.md                   # End-to-end user flows
+├── STRUCTURE.md                   # This file
 └── .gitignore
 ```
 
 ---
 
-## Mapping ke Miora Structure
+## Key Architecture Decisions
 
-| Miora | Killswitch | Sama/Beda |
-|---|---|---|
-| `backend/app/clients/` | `backend/app/clients/` | Sama — external API clients |
-| `backend/app/dto/` | `backend/app/dto/` | Sama — request/response objects |
-| `backend/app/entities/` | `backend/app/entities/` | Sama — GORM database models |
-| `backend/app/handlers/` | `backend/app/handlers/` | Sama — HTTP handlers |
-| `backend/app/http/` | `backend/app/http/` | Sama — route registration |
-| `backend/app/interfaces/` | `backend/app/interfaces/` | Sama — contracts |
-| `backend/app/services/` | `backend/app/services/` | Sama — business logic |
-| `backend/app/ws/` | `backend/app/ws/` | Sama — WebSocket hub |
-| `backend/router/` | `backend/router/` | Sama — DI container + routes |
-| `backend/config/` | `backend/config/` | Sama — env config |
-| `backend/constants/` | `backend/constants/` | Sama — constants |
-| `backend/migrations/` | `backend/migrations/` | Sama — auto-migrate |
-| `backend/pkg/` | `backend/pkg/` | Sama — AppError |
-| `backend/app/services/monitor.go` | `backend/app/services/sentinel.go` | Mirip — background service yang monitor |
-| `backend/app/services/scoring.go` | `backend/app/services/evaluator.go` | Mirip — evaluate data against rules |
-| `backend/app/services/ai.go` | `backend/app/services/alert.go` | Mirip — generate output dari analysis |
-| — | `backend/app/services/circuit_breaker.go` | Baru — trigger on-chain pause |
-| — | `backend/app/services/simulator.go` | Baru — Drift hack replay |
-| `contracts/evm/` (Foundry) | `contracts/guardian/` (Anchor) | Beda framework — Anchor untuk Solana |
-| `frontend/` (Next.js) | `frontend/` (Next.js) | Sama — Next.js + Tailwind + shadcn |
+### Session-per-Transaction Pattern
+The Sentinel service uses `session_factory` to create fresh database sessions for each transaction evaluation. This prevents stale session issues that occur with long-lived background services.
 
----
+### Severity Escalation (Multi-Signal Correlation)
+The Evaluator doesn't just check individual rules — it correlates signals:
+- 0 warnings → LOW
+- 1 warning → ELEVATED
+- 2+ warnings → auto-escalate to CRITICAL → pause
+- Admin action + any warning → auto-escalate to CRITICAL → pause
 
-## Key Differences dari Miora
+### Attack Test (Fire Drill)
+The `/api/_internal/attack_test` endpoint bypasses the normal Sentinel flow. It:
+1. Reads user-configured thresholds from DB
+2. Generates attack amounts scaled to those thresholds (40%, 70%, 120%)
+3. Evaluates all steps without pausing mid-sequence
+4. Pauses + sends one comprehensive Telegram alert with ALL indicators
 
-1. **Sentinel service** menggantikan wallet monitor — sama-sama background polling, tapi monitor TX stream bukan wallet-specific
-2. **Evaluator** menggantikan scoring engine — sama-sama evaluate data against rules, tapi invariant rules bukan wallet scores
-3. **Circuit breaker** adalah komponen baru — interact dengan on-chain program untuk pause
-4. **Simulator** adalah komponen baru — replay historical transactions untuk demo
-5. **Smart contract** pakai Anchor (Solana) bukan Foundry (EVM)
-6. **No AI layer** — rule-based evaluation, tidak perlu Gemini/LLM
-7. **No auth (Firebase)** — API key auth saja untuk MVP, bukan user accounts
-
+### TVL Drop Calculation
+TVL Drop uses an estimated baseline TVL ($50M) to convert raw dollar amounts to percentages. This makes the threshold (e.g., 10%) meaningful — a $5M withdrawal = 10% TVL drop.
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology | Kenapa |
+| Layer | Technology | Why |
 |---|---|---|
-| **Backend** | Go + Fiber | Sama dengan Miora — fast, lightweight, familiar |
-| **ORM** | GORM | Sama dengan Miora — auto-migrate, clean query |
-| **Database** | PostgreSQL | Sama dengan Miora — store protocols, invariants, incidents |
-| **Real-time (backend)** | WebSocket (Fiber) | Sama dengan Miora — push updates ke dashboard |
-| **TX Streaming** | Solana WebSocket / Yellowstone gRPC (Geyser) | Subscribe ke semua transaksi real-time dari Solana node |
-| **Solana RPC** | solana-go (gagliardetto) | Go SDK untuk interact dengan Solana — send TX, read accounts |
-| **Smart Contract** | Anchor (Rust) | Standard Solana program framework — guardian program |
-| **Frontend** | Next.js 16 + TypeScript | Sama dengan Miora |
-| **Styling** | Tailwind CSS v4 + shadcn/ui | Sama dengan Miora |
-| **Frontend Solana** | @solana/web3.js + @solana/wallet-adapter | Connect wallet, read on-chain state |
-| **Auth** | Wallet-based (Phantom/Solflare) | Connect wallet = login. Wallet address = identity. No Firebase, no API keys |
-| **Alerts** | Telegram Bot API | Dimana protocol teams sudah ada |
-| **Infra** | Docker + Docker Compose | Sama dengan Miora |
-| **Testing (contract)** | Anchor test (Mocha + Chai) | Standard Anchor testing |
-| **Deployment (contract)** | Solana CLI + Anchor CLI | Deploy ke devnet/mainnet |
+| **Backend** | Python 3.12 + FastAPI | Async-first, fast development, great for hackathon |
+| **ORM** | SQLAlchemy (async) | Mature, async support, flexible |
+| **Database** | PostgreSQL | Reliable, JSON support for tx_hashes |
+| **Real-time** | WebSocket (FastAPI) | Push updates to dashboard |
+| **TX Streaming** | Solana WebSocket (mock mode) | Subscribe to program transactions |
+| **Solana RPC** | solders / solana-py | Python SDK for Solana interaction |
+| **Smart Contract** | Anchor (Rust) | Standard Solana program framework |
+| **Frontend** | Next.js 16 + TypeScript | App Router, server components |
+| **Styling** | Tailwind CSS v4 + shadcn/ui | Rapid UI development |
+| **Wallet** | @solana/wallet-adapter | Phantom, Solflare support |
+| **Alerts** | Telegram Bot API (httpx) | Where protocol teams already are |
+| **Infra** | Docker + Docker Compose | One command to run everything |
 
-### Tidak Dipakai (vs Miora)
+---
 
-| Miora Punya | Killswitch Tidak Perlu | Alasan |
-|---|---|---|
-| Google Gemini (AI) | ❌ | Rule-based evaluation, tidak perlu LLM |
-| Firebase Auth | ❌ | Wallet-based auth — connect wallet = login. Guardian wallet = identity |
-| Alchemy | ❌ | Pakai Solana RPC langsung + Geyser |
-| DexScreener | ❌ | Tidak perlu market data |
-| Moralis / Birdeye | ❌ | Tidak perlu historical prices |
-| 1inch / Jupiter | ❌ | Tidak ada swap functionality |
-| Resend (email) | ❌ | Telegram cukup untuk alerts |
+## Guardian Program (On-chain)
+
+**Program ID:** `8uSSf1TnE6Bqz1qGt3uZVAwU5Za9f1Sgp7sxtBQJ5HyJ` (devnet)
+
+### Instructions
+| Instruction | Description |
+|---|---|
+| `register_protocol` | Register a new protocol with guardian key |
+| `add_invariant` | Add an invariant rule to a protocol |
+| `remove_invariant` | Remove an invariant rule |
+| `update_config` | Update protocol configuration |
+| `trigger_pause` | Emergency pause (called by Sentinel) |
+| `resume` | Resume protocol (requires guardian signature) |
+
+### State (PDAs)
+- **ProtocolConfig** — protocol address, guardian key, sentinel key, status, invariant count
+- **InvariantRule** — type (enum), threshold, time_window, enabled

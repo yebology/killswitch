@@ -43,12 +43,13 @@ Configurable security rules that should never be violated:
 |---|---|---|
 | **Withdrawal Rate** | Max $5M per minute | Auto-pause |
 | **TVL Drop** | Max 10% drop in 5 minutes | Auto-pause |
-| **Admin Action** | Any admin activity (key change, parameter modification) | Alert |
+| **Admin Action** | Any admin activity (key change, parameter modification) | Auto-pause |
 
 **Severity Escalation:** Killswitch automatically correlates multiple signals. If 2+ rules are in warning state simultaneously (>50% of threshold), or an admin action occurs alongside any other warning, the system auto-escalates to CRITICAL and triggers pause — even if no single rule has been breached.
 
 ### 📢 Telegram Alerts
-- Telegram bot notifications for all incidents and breaches
+- Comprehensive Telegram bot notifications for all incidents
+- Shows all breached indicators, damage estimate, and action taken
 - Dashboard real-time push via WebSocket
 
 ### 🔄 Drift Hack Replay
@@ -63,16 +64,23 @@ Configurable security rules that should never be violated:
 - No Firebase, no API keys, no passwords
 - Crypto-native authentication
 
+### 🚨 Attack Test (Fire Drill)
+- One-click attack simulation on your registered protocol
+- Injects Drift-like exploit pattern (admin takeover + parameter change + rapid drain)
+- Attack amounts dynamically scaled to your configured thresholds
+- Comprehensive Telegram alert showing all breached indicators
+- Protocol auto-pauses — verify your security setup works end-to-end
+
 ---
 
 ## 📋 How It Works
 
 1. 🔗 **Connect** — Protocol team connects guardian wallet to Killswitch dashboard
 2. 📝 **Register** — Register program address and configure alert channels
-3. 📏 **Set Rules** — Define invariant rules: withdrawal limits, TVL thresholds, admin change alerts
+3. 📏 **Set Rules** — Define invariant rules: withdrawal limits, TVL thresholds, admin action alerts
 4. 👁️ **Monitor** — Sentinel watches every transaction in real-time, evaluates against rules
 5. 🛑 **Protect** — When a rule is breached, circuit breaker auto-pauses the program on-chain
-6. 📢 **Alert** — Team gets instant notification with incident details
+6. 📢 **Alert** — Team gets instant Telegram notification with full incident details
 7. 🔍 **Review** — Full incident timeline on dashboard for investigation
 8. ▶️ **Resume** — Team signs with guardian wallet to resume after review
 
@@ -82,13 +90,13 @@ Configurable security rules that should never be violated:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  Dashboard (Next.js)                     │
-│  Monitor → Configure Rules → Incidents → Simulate        │
+│                  Dashboard (Next.js 16)                   │
+│  Monitor → Configure Rules → Incidents → Replay          │
 └──────────────────────┬──────────────────────────────────┘
                        │ REST API + WebSocket
                        ▼
 ┌─────────────────────────────────────────────────────────┐
-│              Sentinel Service (Go + Fiber)                │
+│            Sentinel Service (Python + FastAPI)            │
 │                                                          │
 │  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
 │  │ Geyser   │  │ Invariant    │  │ Alert             │  │
@@ -122,14 +130,14 @@ Configurable security rules that should never be violated:
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go, Fiber, GORM, WebSocket |
+| Backend | Python 3.12, FastAPI, SQLAlchemy (async), Pydantic |
 | Database | PostgreSQL |
-| TX Streaming | Solana Geyser / Yellowstone gRPC |
-| Solana RPC | solana-go |
+| TX Streaming | Solana Geyser / WebSocket (mock mode for demo) |
+| Solana RPC | solders / solana-py |
 | Smart Contract | Anchor (Rust) |
 | Frontend | Next.js 16, Tailwind CSS v4, shadcn/ui, TypeScript |
 | Wallet Auth | @solana/wallet-adapter (Phantom, Solflare) |
-| Alerts | Telegram Bot API |
+| Alerts | Telegram Bot API (httpx) |
 | Infra | Docker, Docker Compose |
 
 ---
@@ -140,56 +148,85 @@ Configurable security rules that should never be violated:
 killswitch/
 ├── backend/
 │   ├── app/
-│   │   ├── clients/        # Geyser listener, Solana RPC, Telegram bot
-│   │   ├── dto/            # Request/response objects
-│   │   ├── entities/       # Database models (Protocol, Invariant, Incident)
-│   │   ├── handlers/       # HTTP handlers (protocol, invariant, simulate, auth)
-│   │   ├── http/           # Route registration per domain
-│   │   ├── interfaces/     # Service & repository contracts
-│   │   ├── middleware/      # Wallet signature verification
-│   │   ├── output/         # Standardized API response envelope
-│   │   ├── repositories/   # Database access layer
-│   │   ├── services/       # Business logic (sentinel, evaluator, circuit_breaker, telegram, simulator)
-│   │   └── ws/             # WebSocket hub for real-time dashboard
-│   ├── cmd/                # CLI commands (seed, simulate)
-│   ├── config/             # Environment config loader
-│   ├── constants/          # Invariant types, errors, success messages
-│   ├── migrations/         # Database migrations
-│   ├── router/             # DI container + route setup
-│   ├── utils/              # Shared utilities
-│   ├── pkg/                # Shared packages (AppError)
-│   └── main.go             # Entry point
+│   │   ├── api/
+│   │   │   ├── deps.py            # FastAPI dependencies (DI)
+│   │   │   ├── middleware.py      # CORS + exception handlers
+│   │   │   ├── response.py       # Standardized API response envelope
+│   │   │   └── routes/
+│   │   │       ├── auth.py        # Wallet verification
+│   │   │       ├── health.py      # Health check
+│   │   │       ├── internal.py    # Attack test + TX injection (demo)
+│   │   │       ├── invariant.py   # Invariant CRUD
+│   │   │       ├── protocol.py    # Protocol CRUD + resume
+│   │   │       └── simulate.py    # Drift hack replay
+│   │   ├── clients/
+│   │   │   ├── geyser.py         # Solana TX stream (mock + real mode)
+│   │   │   ├── solana.py         # Solana RPC client (trigger_pause, resume)
+│   │   │   └── telegram.py       # Telegram Bot API client
+│   │   ├── core/
+│   │   │   ├── config.py         # Pydantic Settings (env loader)
+│   │   │   ├── database.py       # SQLAlchemy async engine + session
+│   │   │   ├── exceptions.py     # AppError
+│   │   │   └── security.py       # Wallet signature verification
+│   │   ├── models/               # SQLAlchemy ORM models
+│   │   │   ├── protocol.py       # Protocol (program_address, status, guardian_wallet)
+│   │   │   ├── invariant.py      # Invariant (type, threshold, time_window, action)
+│   │   │   └── incident.py       # Incident (trigger_time, tx_hashes, damage_estimate)
+│   │   ├── repositories/         # Database access layer
+│   │   │   ├── protocol.py
+│   │   │   ├── invariant.py
+│   │   │   └── incident.py
+│   │   ├── schemas/              # Pydantic request/response schemas
+│   │   │   ├── requests.py
+│   │   │   └── responses.py
+│   │   ├── services/             # Business logic
+│   │   │   ├── sentinel.py       # Core: TX stream → evaluate → trigger actions
+│   │   │   ├── evaluator.py      # Invariant evaluation + severity escalation
+│   │   │   ├── circuit_breaker.py # On-chain pause/resume + incident recording
+│   │   │   ├── telegram.py       # Alert message formatting + dispatch
+│   │   │   ├── protocol.py       # Protocol registration + management
+│   │   │   ├── invariant.py      # Invariant CRUD
+│   │   │   ├── incident.py       # Incident queries
+│   │   │   └── simulator.py      # Drift hack replay engine
+│   │   ├── ws/                   # WebSocket real-time updates
+│   │   │   ├── manager.py        # Connection manager
+│   │   │   └── routes.py         # WebSocket endpoint
+│   │   └── constants.py          # Invariant types, status values, messages
+│   ├── seeds/                    # Database seeding
+│   ├── scripts/                  # Attack simulator script
+│   ├── main.py                   # FastAPI app entry point + lifespan
+│   ├── requirements.txt
+│   ├── Dockerfile
+│   └── .env
 ├── frontend/
-│   ├── app/                # Next.js App Router
-│   │   ├── page.tsx        # Landing page
-│   │   ├── dashboard/      # Main monitoring dashboard
-│   │   ├── protocols/      # Protocol list + detail + invariant config
-│   │   ├── incidents/      # Incident history + timeline
-│   │   └── simulate/       # Drift hack replay
+│   ├── app/                      # Next.js App Router
+│   │   ├── page.tsx              # Landing page
+│   │   ├── dashboard/page.tsx    # Main monitoring dashboard
+│   │   ├── protocols/page.tsx    # Protocol list
+│   │   ├── protocols/[id]/page.tsx # Protocol detail + attack test
+│   │   └── simulate/page.tsx     # Drift hack replay
 │   ├── components/
-│   │   ├── ui/             # shadcn/ui components
-│   │   ├── layout/         # Navbar, Sidebar, Footer
-│   │   ├── dashboard/      # Status indicator, TX feed, invariant status, alert timeline
-│   │   ├── protocol/       # Register form, protocol card, invariant editor
-│   │   ├── incident/       # Incident card, incident timeline
-│   │   ├── simulate/       # Drift replay visualizer, simulation controls
-│   │   └── providers/      # Theme provider, Wallet provider
-│   ├── constants/          # Invariant types, nav, landing
-│   ├── hooks/              # useWebSocket, useSimulation
-│   ├── types/              # TypeScript types
-│   └── lib/                # Utilities, API client
+│   │   ├── ui/                   # shadcn/ui components
+│   │   ├── layout/               # Navbar
+│   │   ├── dashboard/            # Threat level, invariant status
+│   │   ├── protocol/             # Register form, invariant editor
+│   │   ├── simulate/             # Drift replay visualizer
+│   │   └── providers/            # Wallet provider, auth provider
+│   ├── hooks/                    # useWebSocket
+│   ├── types/                    # TypeScript types
+│   ├── constants/                # Invariant types, nav items
+│   └── lib/                      # API client, utilities
 ├── contracts/
-│   └── guardian/            # Anchor program (Solana smart contract)
-│       ├── programs/
-│       │   └── guardian/
-│       │       └── src/
-│       │           ├── lib.rs
-│       │           ├── instructions/   # register, add_invariant, trigger_pause, resume
-│       │           ├── state/          # protocol_config, invariant_rule (PDAs)
-│       │           ├── error.rs
-│       │           └── constants.rs
-│       ├── tests/
+│   └── guardian/                 # Anchor program (Solana smart contract)
+│       ├── programs/guardian/src/
+│       │   ├── lib.rs
+│       │   ├── instructions/     # register, add_invariant, trigger_pause, resume
+│       │   ├── state/            # protocol_config, invariant_rule (PDAs)
+│       │   ├── error.rs
+│       │   └── constants.rs
+│       ├── tests/guardian.ts
 │       └── Anchor.toml
+├── docker-compose.yml            # PostgreSQL + Backend + Frontend
 ├── Makefile
 └── README.md
 ```
@@ -199,16 +236,15 @@ killswitch/
 ## 🧭 How to Run
 
 ### 📦 Prerequisites
-- Go 1.25+
 - Docker & Docker Compose
-- Node.js 18+
+- Node.js 18+ (for frontend dev)
 - Rust + Anchor CLI (for smart contract)
 - Solana CLI (for devnet deployment)
 
 ### 🔨 1. Clone Repository
 
 ```bash
-git clone https://github.com/[username]/killswitch.git
+git clone https://github.com/yebology/killswitch.git
 cd killswitch
 ```
 
@@ -216,14 +252,16 @@ cd killswitch
 
 ```bash
 cp backend/.env.example backend/.env
-# Fill in: Solana RPC URL, Geyser URL, DB credentials, Telegram bot token
+# Fill in: Solana RPC URL, Guardian Program ID, Sentinel keypair, Telegram bot token + chat ID
 ```
 
-### 🐘 3. Start Database
+### 🚀 3. Start Everything (Docker)
 
 ```bash
-cd backend && docker compose up -d
+make docker-up
 ```
+
+This starts PostgreSQL, Backend (port 8002), and Frontend (port 3003).
 
 ### ⚓ 4. Deploy Guardian Program (Devnet)
 
@@ -231,20 +269,12 @@ cd backend && docker compose up -d
 cd contracts/guardian
 anchor build
 anchor deploy --provider.cluster devnet
-# Copy program ID to backend .env
+# Program ID: 8uSSf1TnE6Bqz1qGt3uZVAwU5Za9f1Sgp7sxtBQJ5HyJ
 ```
 
-### 🚀 5. Run Backend
+### 🌐 5. Access Dashboard
 
-```bash
-cd backend && go run main.go
-```
-
-### 🌐 6. Run Frontend
-
-```bash
-cd frontend && npm install && npm run dev
-```
+Open http://localhost:3003 and connect your wallet.
 
 ---
 
@@ -252,17 +282,18 @@ cd frontend && npm install && npm run dev
 
 | Variable | Description |
 |----------|------------|
-| `APP_PORT` | Backend server port |
+| `APP_PORT` | Backend server port (default: 8000) |
 | `POSTGRES_USER` | PostgreSQL username |
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 | `POSTGRES_DB` | PostgreSQL database name |
-| `DB_HOST` | Database host |
-| `DB_PORT` | Database port |
-| `SOLANA_RPC_URL` | Solana RPC endpoint (devnet/mainnet) |
-| `SOLANA_WS_URL` | Solana WebSocket endpoint for TX streaming |
+| `DB_HOST` | Database host (`postgres` in Docker) |
+| `DB_PORT` | Database port (default: 5432) |
+| `SOLANA_RPC_URL` | Solana RPC endpoint (devnet) |
+| `SOLANA_WS_URL` | Solana WebSocket endpoint |
 | `GUARDIAN_PROGRAM_ID` | Deployed Guardian Program address |
-| `SENTINEL_KEYPAIR` | Sentinel's keypair path (authorized to trigger pause) |
+| `SENTINEL_KEYPAIR` | Sentinel's keypair JSON (authorized to trigger pause) |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot API token for alerts |
+| `TELEGRAM_CHAT_ID` | Default Telegram chat ID for alerts |
 | `ALLOWED_ORIGINS` | CORS allowed origins |
 
 ---
@@ -273,23 +304,27 @@ cd frontend && npm install && npm run dev
 | Method | Endpoint | Description |
 |--------|----------|------------|
 | GET | `/api/health` | Health check |
-| GET | `/api/simulate/drift` | Run Drift hack replay (public demo) |
+| GET | `/api/simulate/drift` | Run Drift hack replay |
 
-### Protected (Wallet Auth)
+### Protected (Wallet Auth via X-Wallet-Address header)
 | Method | Endpoint | Description |
 |--------|----------|------------|
-| POST | `/api/auth/verify` | Verify wallet signature |
 | POST | `/api/protocols` | Register a new protocol |
 | GET | `/api/protocols` | List user's registered protocols |
-| GET | `/api/protocols/:id` | Get protocol detail + status |
+| GET | `/api/protocols/:id` | Get protocol detail + invariants |
 | POST | `/api/protocols/:id/invariants` | Add invariant rule |
-| GET | `/api/protocols/:id/invariants` | List invariant rules |
-| POST | `/api/protocols/:id/resume` | Resume paused protocol (requires wallet sign) |
+| POST | `/api/protocols/:id/resume` | Resume paused protocol |
+
+### Internal (Demo/Testing)
+| Method | Endpoint | Description |
+|--------|----------|------------|
+| POST | `/api/_internal/attack_test` | Run attack simulation on a protocol |
+| POST | `/api/_internal/inject_tx` | Inject a single transaction |
 
 ### WebSocket
 | Endpoint | Description |
 |----------|------------|
-| `ws://host/ws?protocol_id=ID` | Real-time TX feed + invariant status + alerts |
+| `ws://host/ws?protocol_id=ID` | Real-time TX feed + threat level + alerts |
 
 ---
 
@@ -299,11 +334,11 @@ The killer demo:
 
 | Time | Event | Killswitch Response |
 |---|---|---|
-| T+0:00 | Admin key changed | ⚠️ Alert: "Admin key change detected" |
-| T+0:30 | Safety parameters removed | 🔴 Alert: "Withdrawal limits disabled" |
-| T+1:00 | $2M withdrawn | 🟡 Warning: withdrawal rate 40% of limit |
-| T+2:00 | $6M total withdrawn | 🛑 **CIRCUIT BREAKER** — program paused |
-| T+2:01 | Alert sent to team | Telegram notification |
+| T+0:00 | Admin key changed | 🔴 BREACH: Admin action detected |
+| T+0:15 | Safety parameters removed | 🔴 BREACH: Parameter change detected |
+| T+0:45 | $6.2M withdrawn | 🟡 WARNING: 40% of threshold |
+| T+1:30 | $18.5M withdrawn | 🛑 **CIRCUIT BREAKER** — program paused |
+| T+1:31 | Telegram alert sent | Full incident details to team |
 | T+12:00 | Reality: $285M gone | **With Killswitch: $6M lost, $279M saved** |
 
 ---
