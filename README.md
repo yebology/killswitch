@@ -2,6 +2,16 @@
 
 > **Real-time exploit detection and auto-pause for Solana DeFi protocols.**
 
+## 🎬 Demo Video
+
+[![Killswitch Demo](https://img.shields.io/badge/Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube)](https://youtu.be/pn-9KJJ_ReU)
+
+## 🎤 Pitch Deck
+
+[![Killswitch Pitch](https://img.shields.io/badge/Watch%20Pitch-YouTube-red?style=for-the-badge&logo=youtube)](https://youtu.be/HUUrHkWcAfQ) [![Slides](https://img.shields.io/badge/Slides-Google%20Slides-yellow?style=for-the-badge&logo=googleslides)](https://docs.google.com/presentation/d/1VQ_-CtcHYrVeAD0pahW_Y4I4V_qcCQwZEyB9jhu_r98/edit?usp=sharing)
+
+---
+
 **Killswitch** is a runtime security system for Solana that monitors on-chain activity, detects anomalous transaction patterns, and auto-pauses programs before exploits drain funds — the emergency stop button that DeFi protocols are missing.
 
 On April 1, 2026, Drift Protocol lost $285M in 12 minutes. The code was audited. The oracles worked. But nothing was watching at runtime. Killswitch would have stopped it in 30 seconds.
