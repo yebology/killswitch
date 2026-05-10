@@ -48,10 +48,8 @@
 - [ ] `services/evaluator.go` — Invariant evaluation engine:
   - [ ] WITHDRAWAL_RATE: sum withdrawals in time window, compare to threshold
   - [ ] TVL_DROP: track TVL changes over time window, compare to threshold
-  - [ ] ADMIN_KEY_CHANGE: detect authority/admin instruction changes
-  - [ ] SINGLE_TX_SIZE: check individual transaction amount
-  - [ ] PARAMETER_CHANGE: detect safety parameter modifications
-  - [ ] Severity escalation: calculate combined threat level (LOW/ELEVATED/HIGH/CRITICAL), auto-escalate when 2+ warnings or admin change + any warning
+  - [ ] ADMIN_ACTION: detect authority/admin instruction changes and parameter modifications
+  - [ ] Severity escalation: calculate combined threat level (LOW/ELEVATED/HIGH/CRITICAL), auto-escalate when 2+ warnings or admin action + any warning
 - [ ] `services/circuit_breaker.go` — Call Guardian Program on-chain to trigger pause
 - [ ] `services/alert.go` — Dispatch alerts to Telegram
 - [ ] `services/protocol.go` — Protocol registration + management logic
@@ -62,7 +60,7 @@
 ### Handlers
 - [ ] `handlers/protocol.go` — Register/get/list protocols
 - [ ] `handlers/invariant.go` — Add/list invariants
-- [ ] `handlers/simulate.go` — Run Drift hack simulation
+- [ ] `handlers/simulate.go` — Run Drift hack replay
 - [ ] `handlers/auth.go` — Verify wallet signature
 
 ### HTTP Routes
@@ -101,7 +99,7 @@
 - [ ] `app/page.tsx` — Landing page (hero: "The $285M Drift hack took 12 minutes. Killswitch would have stopped it in 30 seconds.")
 - [ ] `app/dashboard/page.tsx` — Main monitoring dashboard (real-time TX feed, invariant status, combined threat level)
 - [ ] `app/protocols/[id]/page.tsx` — Protocol detail + invariant config editor
-- [ ] `app/simulate/page.tsx` — Drift hack simulation (public, no auth, adjustable parameters)
+- [ ] `app/simulate/page.tsx` — Drift hack replay (public, no auth, adjustable parameters)
 - [ ] `app/layout.tsx` — Root layout with sidebar + wallet provider
 
 ### Components
@@ -112,7 +110,7 @@
 - [ ] `components/dashboard/invariant-status.tsx` — Invariant check results (pass/warn/breach)
 - [ ] `components/protocol/register-form.tsx` — Register new protocol form
 - [ ] `components/protocol/invariant-editor.tsx` — Add invariant rules UI
-- [ ] `components/simulate/drift-replay.tsx` — Drift hack simulation visualizer (timeline + status progression)
+- [ ] `components/simulate/drift-replay.tsx` — Drift hack replay visualizer (timeline + status progression)
 - [ ] `components/simulate/simulation-controls.tsx` — Play/pause/speed/reset controls
 - [ ] `components/providers/theme-provider.tsx`
 - [ ] `components/providers/wallet-provider.tsx` — Solana wallet adapter provider
@@ -134,7 +132,7 @@
 
 ## 🔲 Demo & Submission
 
-- [ ] Drift hack simulation data (actual transaction patterns to replay)
+- [ ] Drift hack replay data (actual transaction patterns to replay)
 - [ ] Record pitch video (< 3 min)
 - [ ] Record technical demo video (2-3 min)
 - [ ] Deploy frontend (Vercel)
@@ -150,7 +148,7 @@
 - [ ] Backend skeleton (config, entities, repos, DI container, routes, main.go)
 - [ ] Protocol + invariant handlers + CRUD
 - [ ] Sentinel service (TX stream listener + basic evaluator)
-- [ ] Invariant evaluator (WITHDRAWAL_RATE, TVL_DROP, ADMIN_KEY_CHANGE)
+- [ ] Invariant evaluator (WITHDRAWAL_RATE, TVL_DROP, ADMIN_ACTION)
 - [ ] Alert dispatcher (Telegram)
 - [ ] WebSocket hub for real-time dashboard push
 - [ ] Wallet-based auth middleware (verify signature)
@@ -172,7 +170,7 @@
 - [ ] Dashboard (real-time TX feed, invariant status, protocol health)
 - [ ] Protocol registration + invariant config UI
 - [ ] Incident timeline page
-- [ ] Drift hack simulation page (visual timeline + controls)
+- [ ] Drift hack replay page (visual timeline + controls)
 
 ### Week 4-5: Polish + Demo
 - [ ] Drift simulation with real transaction patterns
@@ -189,7 +187,7 @@
 - [ ] Auto-pause working end-to-end
 - [ ] Telegram alerts
 - [ ] Dashboard with real-time monitoring
-- [ ] Drift hack simulation demo
+- [ ] Drift hack replay demo
 - [ ] Pitch video + technical demo video
 
 ### Nice to Have

@@ -4,7 +4,7 @@
 
 Dokumen ini mendefinisikan requirements untuk **Killswitch Frontend Dashboard**, yaitu antarmuka web dari Killswitch — sistem deteksi eksploit real-time dan auto-pause untuk protokol DeFi di Solana. Dashboard dibangun menggunakan Next.js 16 (App Router) + TypeScript + Tailwind CSS v4 + shadcn/ui.
 
-Scope dokumen ini di-trim untuk fokus pada demo path hackathon Solana Frontier: landing page, wallet connect, dashboard monitoring, protocol registration, invariant config, dan Drift hack simulation.
+Scope dokumen ini di-trim untuk fokus pada demo path hackathon Solana Frontier: landing page, wallet connect, dashboard monitoring, protocol registration, invariant config, dan Drift hack replay.
 
 ## Glossary
 
@@ -131,7 +131,7 @@ Scope dokumen ini di-trim untuk fokus pada demo path hackathon Solana Frontier: 
 
 1. THE Simulation_Page SHALL be accessible at route `/simulate` without authentication
 2. THE Simulation_Page SHALL display input fields for adjustable parameters: withdrawal rate threshold (default $5M), withdrawal rate window (default 60s), TVL drop threshold (default 10%), TVL drop window (default 300s)
-3. WHEN "Run Simulation" is clicked, THE API_Client SHALL GET `/api/simulate/drift` with the configured parameters
+3. WHEN "Run Replay" is clicked, THE API_Client SHALL GET `/api/simulate/drift` with the configured parameters
 4. THE Drift_Replay SHALL display a visual timeline with color-coded events: green (normal), yellow (warning), red (breach/pause)
 5. THE Simulation_Controls SHALL provide: play, pause, speed (1x/2x/4x), and reset
 6. WHEN the simulation reaches circuit breaker trigger, THE Drift_Replay SHALL display a prominent pause indicator

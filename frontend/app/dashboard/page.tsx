@@ -1,79 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/components/providers/auth-provider";
 import { StatusIndicator } from "@/components/dashboard/status-indicator";
 import { TxFeed } from "@/components/dashboard/tx-feed";
 import { InvariantStatus } from "@/components/dashboard/invariant-status";
 import { CombinedThreatLevel } from "@/components/dashboard/combined-threat-level";
-import type { ThreatLevel, WSTransactionData, InvariantEvaluation } from "@/types";
-
-/** Mock protocol data for initial dashboard display. */
-const MOCK_PROTOCOL = {
-  name: "Demo Protocol",
-  program_address: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
-  status: "active" as const,
-};
-
-/** Mock threat level. */
-const MOCK_THREAT_LEVEL: ThreatLevel = "LOW";
-
-/** Mock invariant evaluations. */
-const MOCK_EVALUATIONS: InvariantEvaluation[] = [
-  {
-    invariant_id: "inv-1",
-    invariant_type: "WITHDRAWAL_RATE",
-    status: "pass",
-    measured_value: 750_000,
-    threshold: 5_000_000,
-  },
-  {
-    invariant_id: "inv-2",
-    invariant_type: "TVL_DROP",
-    status: "pass",
-    measured_value: 0.8,
-    threshold: 10,
-  },
-];
-
-/** Mock transactions for the feed. */
-const MOCK_TRANSACTIONS: WSTransactionData[] = [
-  {
-    hash: "5UfDuX8xvndQKhRzEGm7BLUxnMDRzYkFGHj2AByQd4Nh",
-    instruction: "withdraw",
-    amount: 250_000,
-    timestamp: new Date(Date.now() - 60_000).toISOString(),
-    eval_result: "pass",
-  },
-  {
-    hash: "3Kp9vQxRtYhNmWzJ7eFgBcDsA2LqMnXo8PjUiHkGrTbS",
-    instruction: "deposit",
-    amount: 1_500_000,
-    timestamp: new Date(Date.now() - 45_000).toISOString(),
-    eval_result: "pass",
-  },
-  {
-    hash: "9RmTnYwXqZpLkJhGfDsA4BcVeWuIoP7MnKjHgFeDcBaQ",
-    instruction: "withdraw",
-    amount: 3_200_000,
-    timestamp: new Date(Date.now() - 30_000).toISOString(),
-    eval_result: "warning",
-  },
-  {
-    hash: "2WqErTyUiOpAsDfGhJkLzXcVbNmQwErTyUiOpAsDfGhJ",
-    instruction: "swap",
-    amount: 50_000,
-    timestamp: new Date(Date.now() - 15_000).toISOString(),
-    eval_result: "pass",
-  },
-  {
-    hash: "8HnBvCxZaQwSeDrFtGyHuJiKoLpMnBvCxZaQwSeDrFtG",
-    instruction: "withdraw",
-    amount: 4_800_000,
-    timestamp: new Date(Date.now() - 5_000).toISOString(),
-    eval_result: "warning",
-  },
-];
+import { useWebSocket } from "@/hooks/use-websocket";
+import { get } from "@/lib/api";
+import type { Protocol } from "@/types";
 
 /** Skeleton placeholder for loading state. */
 function Skeleton({ className }: { className?: string }) {
@@ -86,20 +22,73 @@ function Skeleton({ className }: { className?: string }) {
 
 /**
  * Dashboard monitoring page — protected route requiring wallet connection.
- * Composes CombinedThreatLevel, StatusIndicator, InvariantStatus, and TxFeed.
- * Uses mock data for now; will be wired to WebSocket in Task 12.
+ * Fetches the user's first protocol from the API and wires real-time
+ * WebSocket data for TX feed, threat level, and invariant status.
  */
 export default function DashboardPage() {
   const { isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
+  const [protocol, setProtocol] = useState<Protocol | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Simulate 1s loading delay for skeleton display
+  // Fetch the user's first protocol
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 1_000);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!isAuthenticated) return;
 
-  // Route protection is handled by AuthProvider, but show a message if not authenticated
+    let cancelled = false;
+
+    const fetchProtocol = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Get list of protocols, pick the first one
+        const protocols = await get<Protocol[]>("/api/protocols");
+
+        if (cancelled) return;
+
+        if (!protocols || protocols.length === 0) {
+          setProtocol(null);
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch full detail for the first protocol
+        const detail = await get<Protocol>(`/api/protocols/${protocols[0].id}`);
+
+        if (cancelled) return;
+
+        setProtocol(detail);
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : "Failed to load protocol data";
+        setError(message);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    fetchProtocol();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
+
+  // Wire WebSocket with real protocol ID
+  const {
+    transactions,
+    threatLevel,
+    invariantResults,
+    protocolStatus,
+    connectionStatus,
+    escalationReason,
+  } = useWebSocket(protocol?.id, !!protocol);
+
+  // Use WebSocket protocol status if available, otherwise fall back to fetched status
+  const currentStatus = protocol ? (protocolStatus ?? protocol.status) : "active";
+
+  // Route protection is handled by AuthProvider
   if (!isAuthenticated) {
     return (
       <div className="flex h-full items-center justify-center p-8">
@@ -113,44 +102,87 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="space-y-4 p-4 md:p-6">
-        {/* Skeleton: threat level */}
         <Skeleton className="h-40 w-full" />
-
-        {/* Skeleton: status + invariants row */}
         <div className="grid gap-4 md:grid-cols-2">
           <Skeleton className="h-32" />
           <Skeleton className="h-48" />
         </div>
-
-        {/* Skeleton: TX feed */}
         <Skeleton className="h-64 w-full" />
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
+        <p className="text-sm text-status-red">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!protocol) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
+        <p className="text-sm text-muted-foreground">
+          No protocols registered yet.
+        </p>
+        <Link
+          href="/protocols"
+          className="rounded-lg bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Register a Protocol
+        </Link>
+      </div>
+    );
+  }
+
+  /** Connection status indicator color. */
+  const connectionColor =
+    connectionStatus === "connected"
+      ? "bg-status-green"
+      : connectionStatus === "connecting"
+        ? "bg-status-yellow"
+        : "bg-status-red";
+
+  const connectionLabel =
+    connectionStatus === "connected"
+      ? "Connected"
+      : connectionStatus === "connecting"
+        ? "Connecting..."
+        : "Disconnected";
+
   return (
     <div className="space-y-4 p-4 md:p-6">
-      {/* Connection status placeholder — will be wired to WebSocket later */}
+      {/* Connection status */}
       <div className="flex items-center gap-2 rounded-md bg-surface-2/50 px-3 py-1.5 text-xs text-muted-foreground">
-        <span className="h-2 w-2 rounded-full bg-status-yellow" />
-        <span>Koneksi terputus — data menggunakan mock</span>
+        <span className={`h-2 w-2 rounded-full ${connectionColor}`} />
+        <span>{connectionLabel}</span>
+        {escalationReason && (
+          <span className="ml-2 text-status-red">— {escalationReason}</span>
+        )}
       </div>
 
       {/* Threat level — full width top */}
-      <CombinedThreatLevel level={MOCK_THREAT_LEVEL} />
+      <CombinedThreatLevel level={threatLevel} />
 
       {/* Status indicator + Invariant status — side by side */}
       <div className="grid gap-4 md:grid-cols-2">
         <StatusIndicator
-          status={MOCK_PROTOCOL.status}
-          protocolName={MOCK_PROTOCOL.name}
-          programAddress={MOCK_PROTOCOL.program_address}
+          status={currentStatus}
+          protocolName={protocol.name}
+          programAddress={protocol.program_address}
         />
-        <InvariantStatus evaluations={MOCK_EVALUATIONS} />
+        <InvariantStatus evaluations={invariantResults} />
       </div>
 
       {/* Transaction feed — full width below */}
-      <TxFeed transactions={MOCK_TRANSACTIONS} />
+      <TxFeed transactions={transactions} />
     </div>
   );
 }

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { isValidSolanaPublicKey } from "@/lib/utils";
+import { post } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import type { Protocol, RegisterProtocolRequest } from "@/types";
 
@@ -13,9 +15,11 @@ interface RegisterFormProps {
 /**
  * Form for registering a new Solana protocol with Killswitch.
  * Validates program address as a Solana public key.
- * Currently uses console.log + success toast (will wire to API later).
+ * Posts to the backend API on submit.
  */
 export function RegisterForm({ onSuccess }: RegisterFormProps) {
+  const router = useRouter();
+
   const [programAddress, setProgramAddress] = useState("");
   const [protocolName, setProtocolName] = useState("");
   const [telegramChatId, setTelegramChatId] = useState("");
@@ -52,7 +56,7 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
     return true;
   }, [protocolName]);
 
-  /** Handle form submission — dummy data for now. */
+  /** Handle form submission — posts to real API. */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setToast(null);
@@ -63,9 +67,6 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
 
     setIsSubmitting(true);
 
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
     const body: RegisterProtocolRequest = {
       program_address: programAddress.trim(),
       name: protocolName.trim(),
@@ -74,29 +75,29 @@ export function RegisterForm({ onSuccess }: RegisterFormProps) {
       body.telegram_chat_id = telegramChatId.trim();
     }
 
-    // Dummy: log data and show success toast (will wire to API later)
-    console.log("[RegisterForm] Submit:", body);
+    try {
+      const protocol = await post<Protocol>("/api/protocols", body);
 
-    const dummyProtocol: Protocol = {
-      id: `proto-${Date.now()}`,
-      program_address: body.program_address,
-      name: body.name,
-      guardian_wallet: "DummyGuardianWallet1234567890abcdefghijk",
-      telegram_chat_id: body.telegram_chat_id ?? "",
-      status: "active",
-      created_at: new Date().toISOString(),
-      invariants: [],
-    };
+      setToast({ type: "success", message: "Protocol registered successfully!" });
 
-    setToast({ type: "success", message: "Protocol registered successfully!" });
-    setIsSubmitting(false);
+      // Reset form
+      setProgramAddress("");
+      setProtocolName("");
+      setTelegramChatId("");
 
-    // Reset form
-    setProgramAddress("");
-    setProtocolName("");
-    setTelegramChatId("");
-
-    onSuccess?.(dummyProtocol);
+      // Notify parent if callback provided
+      if (onSuccess) {
+        onSuccess(protocol);
+      } else {
+        // Navigate to the new protocol's detail page
+        router.push(`/protocols/${protocol.id}`);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to register protocol";
+      setToast({ type: "error", message });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

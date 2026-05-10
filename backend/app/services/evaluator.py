@@ -67,9 +67,7 @@ class EvaluatorService:
         self.strategies: dict[str, EvaluationStrategy] = {
             "WITHDRAWAL_RATE": self._eval_withdrawal_rate,
             "TVL_DROP": self._eval_tvl_drop,
-            "ADMIN_KEY_CHANGE": self._eval_admin_key_change,
-            "SINGLE_TX_SIZE": self._eval_single_tx_size,
-            "PARAMETER_CHANGE": self._eval_parameter_change,
+            "ADMIN_ACTION": self._eval_admin_action,
         }
 
     async def evaluate(
@@ -121,7 +119,7 @@ class EvaluatorService:
 
         # Check for admin/parameter change signals
         has_admin_signal = any(
-            r.invariant_type in ("ADMIN_KEY_CHANGE", "PARAMETER_CHANGE")
+            r.invariant_type in ("ADMIN_ACTION",)
             and r.status in ("breach", "warning")
             for r in rule_results
         )
@@ -144,7 +142,7 @@ class EvaluatorService:
             admin_rules = [
                 r
                 for r in rule_results
-                if r.invariant_type in ("ADMIN_KEY_CHANGE", "PARAMETER_CHANGE")
+                if r.invariant_type in ("ADMIN_ACTION",)
                 and r.status in ("breach", "warning")
             ]
             other_warnings = [r for r in warnings if r not in admin_rules]
@@ -242,45 +240,18 @@ class EvaluatorService:
             threshold=inv.threshold,
         )
 
-    async def _eval_admin_key_change(
+    async def _eval_admin_action(
         self, tx: ParsedTransaction, inv: Invariant
     ) -> RuleResult:
-        """Evaluate ADMIN_KEY_CHANGE: detect admin/authority instruction changes."""
-        is_admin_change = tx.instruction_type in ("admin_change", "authority_change")
-        measured = 1.0 if is_admin_change else 0.0
-        status = "breach" if is_admin_change else "pass"
-        return RuleResult(
-            invariant_id=inv.id,
-            invariant_type=inv.type,
-            status=status,
-            measured_value=measured,
-            threshold=inv.threshold,
-        )
-
-    async def _eval_single_tx_size(
-        self, tx: ParsedTransaction, inv: Invariant
-    ) -> RuleResult:
-        """Evaluate SINGLE_TX_SIZE: compare individual TX amount vs threshold."""
-        measured = tx.amount
-        status = self._classify(measured, inv.threshold)
-        return RuleResult(
-            invariant_id=inv.id,
-            invariant_type=inv.type,
-            status=status,
-            measured_value=measured,
-            threshold=inv.threshold,
-        )
-
-    async def _eval_parameter_change(
-        self, tx: ParsedTransaction, inv: Invariant
-    ) -> RuleResult:
-        """Evaluate PARAMETER_CHANGE: detect safety parameter modifications."""
-        is_param_change = tx.instruction_type in (
+        """Evaluate ADMIN_ACTION: detect any admin activity (key change, parameter modification, config update)."""
+        is_admin_action = tx.instruction_type in (
+            "admin_change",
+            "authority_change",
             "parameter_change",
             "config_update",
         )
-        measured = 1.0 if is_param_change else 0.0
-        status = "breach" if is_param_change else "pass"
+        measured = 1.0 if is_admin_action else 0.0
+        status = "breach" if is_admin_action else "pass"
         return RuleResult(
             invariant_id=inv.id,
             invariant_type=inv.type,

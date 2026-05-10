@@ -263,7 +263,7 @@ Solana's 400ms blocks enable real-time detection and response that's impossible 
 - [ ] Alert history
 
 ### Week 4-5: Demo & Polish
-- [ ] **Drift Hack Simulation**: replay actual Drift transactions, show Killswitch catching it
+- [ ] **Drift Hack Replay**: replay actual Drift transactions, show Killswitch catching it
 - [ ] Record pitch video (< 3 min)
 - [ ] Record technical demo video (2-3 min)
 - [ ] Polish UI, fix bugs, write docs
@@ -399,11 +399,11 @@ Long-term: become the "Cloudflare of Solana" — every protocol routes through K
    - Stats updated: "1 incident, $XXM saved"
 ```
 
-### Flow 6: Drift Hack Simulation (Demo)
+### Flow 6: Drift Hack Replay (Demo)
 
 ```
 1. User buka /simulate page (no auth required — public demo)
-2. Klik "Run Drift Simulation"
+2. Klik "Run Drift Replay"
 3. System replay actual Drift hack transactions:
    - T+0:00: Admin key change → 🟡 ALERT
    - T+0:30: $2M withdrawal → 🟡 WARNING (40% of limit)

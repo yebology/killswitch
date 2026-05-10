@@ -95,7 +95,7 @@ Scope dokumen ini mencakup MVP untuk hackathon Solana Frontier, di-trim untuk fo
 #### Acceptance Criteria
 
 1. WHEN a POST request is received at /api/protocols/:id/invariants with type, threshold, time_window, and action, THE Sentinel_Service SHALL create a new Invariant record associated with the specified Protocol
-2. THE Sentinel_Service SHALL support the following invariant types: WITHDRAWAL_RATE, TVL_DROP, ADMIN_KEY_CHANGE, SINGLE_TX_SIZE, and PARAMETER_CHANGE
+2. THE Sentinel_Service SHALL support the following invariant types: WITHDRAWAL_RATE, TVL_DROP, ADMIN_ACTION, , and 
 3. IF the invariant type is not one of the supported types, THEN THE Sentinel_Service SHALL return HTTP 400 with an error message "Invalid invariant type"
 4. IF the threshold value is zero or negative, THEN THE Sentinel_Service SHALL return HTTP 400 with an error message "Threshold must be a positive number"
 5. WHEN a GET request is received at /api/protocols/:id/invariants, THE Sentinel_Service SHALL return a list of all Invariant records for the specified Protocol
@@ -121,9 +121,9 @@ Scope dokumen ini mencakup MVP untuk hackathon Solana Frontier, di-trim untuk fo
 1. WHEN a transaction is forwarded to the Evaluator, THE Evaluator SHALL retrieve all enabled Invariant records for the associated Protocol
 2. WHEN evaluating a WITHDRAWAL_RATE invariant, THE Evaluator SHALL sum all withdrawal amounts for the Protocol within the configured time_window and compare the total against the threshold
 3. WHEN evaluating a TVL_DROP invariant, THE Evaluator SHALL calculate the percentage change in total value locked for the Protocol within the configured time_window and compare the percentage against the threshold
-4. WHEN evaluating an ADMIN_KEY_CHANGE invariant, THE Evaluator SHALL detect if the transaction modifies authority or admin keys for the monitored program
-5. WHEN evaluating a SINGLE_TX_SIZE invariant, THE Evaluator SHALL compare the individual transaction amount against the threshold
-6. WHEN evaluating a PARAMETER_CHANGE invariant, THE Evaluator SHALL detect if the transaction modifies safety parameters (withdrawal limits, collateral ratios) for the monitored program
+4. WHEN evaluating an ADMIN_ACTION invariant, THE Evaluator SHALL detect if the transaction modifies authority or admin keys for the monitored program
+5. WHEN evaluating a  invariant, THE Evaluator SHALL compare the individual transaction amount against the threshold
+6. WHEN evaluating a  invariant, THE Evaluator SHALL detect if the transaction modifies safety parameters (withdrawal limits, collateral ratios) for the monitored program
 7. WHEN an invariant evaluation passes, THE Evaluator SHALL return a "pass" result
 8. WHEN an invariant evaluation detects a breach, THE Evaluator SHALL return a "breach" result including the breached invariant ID, the measured value, and the threshold value
 
@@ -136,7 +136,7 @@ Scope dokumen ini mencakup MVP untuk hackathon Solana Frontier, di-trim untuk fo
 1. WHEN the Evaluator completes evaluation of all enabled Invariant rules for a transaction, THE Evaluator SHALL calculate a combined threat level based on the number of rules in warning state (measured value exceeds 50% of threshold)
 2. THE Evaluator SHALL classify the combined threat level as: LOW (0 warnings), ELEVATED (1 warning), HIGH (2+ warnings), or CRITICAL (any single rule breach OR escalation trigger)
 3. WHEN 2 or more rules are in warning state simultaneously, THE Evaluator SHALL escalate the combined threat level to CRITICAL and trigger the same action as a single rule breach
-4. WHEN an ADMIN_KEY_CHANGE or PARAMETER_CHANGE invariant is triggered AND at least 1 other rule is in warning state, THE Evaluator SHALL escalate the combined threat level to CRITICAL
+4. WHEN an ADMIN_ACTION or  invariant is triggered AND at least 1 other rule is in warning state, THE Evaluator SHALL escalate the combined threat level to CRITICAL
 5. WHEN the Evaluator escalates to CRITICAL due to multi-signal correlation, THE Evaluator SHALL return a "breach" result that includes all contributing rule IDs, their measured values, and the escalation reason
 
 ### Requirement 10: Circuit Breaker (Auto-Pause On-Chain)

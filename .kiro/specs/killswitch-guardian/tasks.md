@@ -6,56 +6,56 @@ Implementasi Guardian Program sebagai Anchor smart contract di Solana. Program i
 
 ## Tasks
 
-- [ ] 1. Scaffold Anchor project dan setup dependencies
-  - [ ] 1.1 Initialize Anchor project di `contracts/guardian/` dengan `Cargo.toml`, `Anchor.toml`, dan `package.json`
+- [x] 1. Scaffold Anchor project dan setup dependencies
+  - [x] 1.1 Initialize Anchor project di `contracts/guardian/` dengan `Cargo.toml`, `Anchor.toml`, dan `package.json`
     - Buat `Cargo.toml` dengan dependency `anchor-lang = "0.30.1"`, edition 2021, crate-type `["cdylib", "lib"]`
     - Buat `Anchor.toml` dengan devnet cluster settings, program keypair path, dan test script `npx ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts`
     - Buat `package.json` dengan dependencies: `@coral-xyz/anchor`, `@solana/web3.js`, `chai`, `mocha`, `ts-mocha`, `typescript`, `fast-check`
     - Buat `tsconfig.json` untuk TypeScript test compilation
     - _Requirements: 14.3, 14.4_
 
-  - [ ] 1.2 Create module structure dengan placeholder files
+  - [x] 1.2 Create module structure dengan placeholder files
     - Buat directory structure: `programs/guardian/src/`, `programs/guardian/src/instructions/`, `programs/guardian/src/state/`, `tests/`, `migrations/`
     - Buat placeholder `lib.rs` dengan `declare_id!` macro dan empty program module
     - Buat `instructions/mod.rs`, `state/mod.rs` sebagai re-export modules
     - Buat `error.rs` dan `constants.rs` sebagai empty modules
     - _Requirements: 11.1, 11.3_
 
-- [ ] 2. Implement constants dan error codes
-  - [ ] 2.1 Implement `constants.rs` dengan seeds dan limits
+- [x] 2. Implement constants dan error codes
+  - [x] 2.1 Implement `constants.rs` dengan seeds dan limits
     - Define `MAX_INVARIANTS_PER_PROTOCOL: u8 = 10`
     - Define `PROTOCOL_CONFIG_SEED: &[u8] = b"protocol_config"`
     - Define `INVARIANT_RULE_SEED: &[u8] = b"invariant_rule"`
     - _Requirements: 4.1, 4.2, 4.3_
 
-  - [ ] 2.2 Implement `error.rs` dengan custom error codes
+  - [x] 2.2 Implement `error.rs` dengan custom error codes
     - Define `GuardianError` enum dengan `#[error_code]` attribute
     - Implement 7 error variants: `Unauthorized`, `AlreadyPaused`, `AlreadyActive`, `InvalidInvariant`, `MaxInvariantsReached`, `InvalidThreshold`, `InvalidTimeWindow`
     - Setiap variant harus memiliki `#[msg("...")]` deskriptif
     - _Requirements: 3.1, 3.2, 3.3_
 
-- [ ] 3. Implement state accounts (PDA structs)
-  - [ ] 3.1 Implement `state/protocol_config.rs` — ProtocolConfig account dan ProtocolStatus enum
+- [x] 3. Implement state accounts (PDA structs)
+  - [x] 3.1 Implement `state/protocol_config.rs` — ProtocolConfig account dan ProtocolStatus enum
     - Define `ProtocolStatus` enum dengan variants `Active` dan `Paused`, derive `AnchorSerialize`, `AnchorDeserialize`, `Clone`, `PartialEq`, `Eq`, `Debug`
     - Define `ProtocolConfig` struct dengan `#[account]` attribute: `program_address` (Pubkey), `guardian_key` (Pubkey), `sentinel_key` (Pubkey), `status` (ProtocolStatus), `created_at` (i64), `invariant_count` (u8)
     - Implement `ProtocolConfig::LEN` constant: `8 + 32 + 32 + 32 + 1 + 8 + 1 = 114`
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 12.1, 12.2_
 
-  - [ ] 3.2 Implement `state/invariant_rule.rs` — InvariantRule account, InvariantType enum, InvariantAction enum
+  - [x] 3.2 Implement `state/invariant_rule.rs` — InvariantRule account, InvariantType enum, InvariantAction enum
     - Define `InvariantType` enum dengan 5 variants: `WithdrawalRate`, `TvlDrop`, `AdminKeyChange`, `SingleTxSize`, `ParameterChange`
     - Define `InvariantAction` enum dengan 2 variants: `Pause`, `Alert`
     - Define `InvariantRule` struct dengan `#[account]` attribute: `protocol_config` (Pubkey), `invariant_type` (InvariantType), `threshold` (u64), `time_window` (u32), `action` (InvariantAction), `enabled` (bool), `index` (u8)
     - Implement `InvariantRule::LEN` constant: `8 + 32 + 1 + 8 + 4 + 1 + 1 + 1 = 56`
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 12.1, 12.2_
 
-  - [ ] 3.3 Update `state/mod.rs` to re-export `protocol_config` dan `invariant_rule` modules
+  - [x] 3.3 Update `state/mod.rs` to re-export `protocol_config` dan `invariant_rule` modules
     - _Requirements: 11.3_
 
-- [ ] 4. Checkpoint — Verify state compiles
+- [x] 4. Checkpoint — Verify state compiles
   - Ensure `anchor build` compiles tanpa error. Ask the user if questions arise.
 
-- [ ] 5. Implement register_protocol instruction
-  - [ ] 5.1 Implement `instructions/register_protocol.rs`
+- [x] 5. Implement register_protocol instruction
+  - [x] 5.1 Implement `instructions/register_protocol.rs`
     - Define `RegisterProtocol` accounts context struct dengan `#[derive(Accounts)]` dan `#[instruction(program_address: Pubkey)]`
     - `protocol_config`: `init`, `payer = guardian`, `space = ProtocolConfig::LEN`, `seeds = [PROTOCOL_CONFIG_SEED, program_address.as_ref()]`, `bump`
     - `guardian`: `Signer<'info>`, `#[account(mut)]`
@@ -74,8 +74,8 @@ Implementasi Guardian Program sebagai Anchor smart contract di Solana. Program i
     - Minimum 100 iterations, tag: `Feature: killswitch-guardian, Property 3: Register Protocol Field Correctness`
     - **Validates: Requirements 5.1, 1.4**
 
-- [ ] 6. Implement add_invariant instruction
-  - [ ] 6.1 Implement `instructions/add_invariant.rs`
+- [x] 6. Implement add_invariant instruction
+  - [x] 6.1 Implement `instructions/add_invariant.rs`
     - Define `AddInvariant` accounts context struct
     - `protocol_config`: `mut`, seeds constraint, `constraint = guardian_key == guardian.key() @ GuardianError::Unauthorized`, `constraint = invariant_count < MAX_INVARIANTS_PER_PROTOCOL @ GuardianError::MaxInvariantsReached`
     - `invariant_rule`: `init`, `payer = guardian`, `space = InvariantRule::LEN`, `seeds = [INVARIANT_RULE_SEED, protocol_config.key().as_ref(), &[protocol_config.invariant_count]]`, `bump`
@@ -97,8 +97,8 @@ Implementasi Guardian Program sebagai Anchor smart contract di Solana. Program i
     - Minimum 100 iterations, tag: `Feature: killswitch-guardian, Property 4: Add Invariant Correctness and Count Tracking`
     - **Validates: Requirements 6.1, 6.3, 6.4, 2.5**
 
-- [ ] 7. Implement remove_invariant instruction
-  - [ ] 7.1 Implement `instructions/remove_invariant.rs`
+- [x] 7. Implement remove_invariant instruction
+  - [x] 7.1 Implement `instructions/remove_invariant.rs`
     - Define `RemoveInvariant` accounts context struct
     - `protocol_config`: `mut`, seeds constraint, `constraint = guardian_key == guardian.key() @ GuardianError::Unauthorized`
     - `invariant_rule`: `mut`, `close = guardian`, seeds with `&[invariant_rule.index]`, `constraint = invariant_rule.protocol_config == protocol_config.key()`
@@ -116,8 +116,8 @@ Implementasi Guardian Program sebagai Anchor smart contract di Solana. Program i
     - Minimum 100 iterations, tag: `Feature: killswitch-guardian, Property 5: Remove Invariant Closes Account and Decrements Count`
     - **Validates: Requirements 7.1, 7.2**
 
-- [ ] 8. Implement update_config instruction
-  - [ ] 8.1 Implement `instructions/update_config.rs`
+- [x] 8. Implement update_config instruction
+  - [x] 8.1 Implement `instructions/update_config.rs`
     - Define `UpdateConfig` accounts context struct
     - `protocol_config`: `mut`, seeds constraint, `constraint = guardian_key == guardian.key() @ GuardianError::Unauthorized`
     - `guardian`: `Signer<'info>`
@@ -137,11 +137,11 @@ Implementasi Guardian Program sebagai Anchor smart contract di Solana. Program i
     - Minimum 100 iterations, tag: `Feature: killswitch-guardian, Property 7: Update Config Key Correctness`
     - **Validates: Requirements 8.1, 8.2, 8.3**
 
-- [ ] 9. Checkpoint — Verify management instructions compile and pass tests
+- [x] 9. Checkpoint — Verify management instructions compile and pass tests
   - Ensure `anchor build` compiles and all tests pass. Ask the user if questions arise.
 
-- [ ] 10. Implement trigger_pause instruction
-  - [ ] 10.1 Implement `instructions/trigger_pause.rs`
+- [x] 10. Implement trigger_pause instruction
+  - [x] 10.1 Implement `instructions/trigger_pause.rs`
     - Define `TriggerPause` accounts context struct
     - `protocol_config`: `mut`, seeds constraint, `constraint = sentinel_key == sentinel.key() @ GuardianError::Unauthorized`
     - `sentinel`: `Signer<'info>`
@@ -155,8 +155,8 @@ Implementasi Guardian Program sebagai Anchor smart contract di Solana. Program i
     - Test log message contains program_address and status
     - _Requirements: 13.4, 13.6, 13.7_
 
-- [ ] 11. Implement resume instruction
-  - [ ] 11.1 Implement `instructions/resume.rs`
+- [x] 11. Implement resume instruction
+  - [x] 11.1 Implement `instructions/resume.rs`
     - Define `Resume` accounts context struct
     - `protocol_config`: `mut`, seeds constraint, `constraint = guardian_key == guardian.key() @ GuardianError::Unauthorized`
     - `guardian`: `Signer<'info>`
@@ -176,21 +176,21 @@ Implementasi Guardian Program sebagai Anchor smart contract di Solana. Program i
     - Minimum 100 iterations, tag: `Feature: killswitch-guardian, Property 6: Pause/Resume Round-Trip`
     - **Validates: Requirements 9.1, 10.1**
 
-- [ ] 12. Wire all instructions into lib.rs entry point
-  - [ ] 12.1 Update `instructions/mod.rs` to re-export all 6 instruction modules
+- [x] 12. Wire all instructions into lib.rs entry point
+  - [x] 12.1 Update `instructions/mod.rs` to re-export all 6 instruction modules
     - Re-export: `register_protocol`, `add_invariant`, `remove_invariant`, `update_config`, `trigger_pause`, `resume`
     - _Requirements: 11.1, 11.3_
 
-  - [ ] 12.2 Update `lib.rs` with complete program module
+  - [x] 12.2 Update `lib.rs` with complete program module
     - Import all modules: `constants`, `error`, `instructions`, `state`
     - Import instruction context types and enum types (`InvariantType`, `InvariantAction`)
     - Define all 6 instruction handler functions in `#[program]` module, each delegating to its respective `handler` function
     - _Requirements: 11.1, 11.2_
 
-- [ ] 13. Checkpoint — Full build and test suite
+- [x] 13. Checkpoint — Full build and test suite
   - Ensure `anchor build` compiles successfully and all unit + property tests pass. Ask the user if questions arise.
 
-- [ ] 14. Write property tests for serialization and authorization
+- [x] 14. Write property tests for serialization and authorization
   - [ ]* 14.1 Write property test for serialization round-trip
     - **Property 1: Serialization Round-Trip**
     - Generate random ProtocolConfig states (random Pubkeys, random ProtocolStatus, random i64, random u8) and InvariantRule states (random Pubkey, random InvariantType, random u64, random u32, random InvariantAction, random bool, random u8); serialize with Borsh then deserialize, verify equivalence
@@ -203,18 +203,18 @@ Implementasi Guardian Program sebagai Anchor smart contract di Solana. Program i
     - Minimum 100 iterations, tag: `Feature: killswitch-guardian, Property 2: Unauthorized Signer Rejection`
     - **Validates: Requirements 3.2, 6.5, 7.3, 8.4, 9.2, 10.2**
 
-- [ ] 15. Setup deployment configuration
-  - [ ] 15.1 Create `migrations/deploy.ts` deployment script
+- [x] 15. Setup deployment configuration
+  - [x] 15.1 Create `migrations/deploy.ts` deployment script
     - Standard Anchor migration script
     - _Requirements: 14.1_
 
-  - [ ] 15.2 Verify `Anchor.toml` and `Cargo.toml` are correct for devnet deployment
+  - [x] 15.2 Verify `Anchor.toml` and `Cargo.toml` are correct for devnet deployment
     - Ensure `Anchor.toml` has `[programs.devnet]` section with program name
     - Ensure `Cargo.toml` has all required dependencies
     - Ensure `declare_id!` in `lib.rs` is ready to be updated with actual Program ID after first deploy
     - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-- [ ] 16. Final checkpoint — Full build, tests, and deployment readiness
+- [x] 16. Final checkpoint — Full build, tests, and deployment readiness
   - Ensure `anchor build` compiles, all tests pass, and project is ready for `anchor deploy --provider.cluster devnet`. Ask the user if questions arise.
 
 ## Notes

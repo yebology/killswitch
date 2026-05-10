@@ -1,98 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { SimulationControls } from "@/components/simulate/simulation-controls";
 import { DriftReplay } from "@/components/simulate/drift-replay";
 import { SimulationSummary } from "@/components/simulate/simulation-summary";
 import { useSimulation } from "@/hooks/use-simulation";
-import type { SimulationEvent, InvariantResponse } from "@/types";
-
-/** Dummy simulation timeline — hardcoded Drift hack replay. */
-const DUMMY_TIMELINE: SimulationEvent[] = [
-  {
-    timestamp: "2026-04-01T12:00:00Z",
-    event_type: "admin_change",
-    description: "Admin key changed via compromised multisig",
-    eval_result: "breach",
-    threat_level: "ELEVATED",
-    response_action: "alert",
-    cumulative_drain: 0,
-  },
-  {
-    timestamp: "2026-04-01T12:00:30Z",
-    event_type: "parameter_change",
-    description: "Withdrawal safety limits removed",
-    eval_result: "breach",
-    threat_level: "HIGH",
-    response_action: "alert",
-    cumulative_drain: 0,
-  },
-  {
-    timestamp: "2026-04-01T12:01:00Z",
-    event_type: "withdrawal",
-    description: "$2M withdrawn from vault",
-    eval_result: "warning",
-    threat_level: "HIGH",
-    response_action: "monitor",
-    cumulative_drain: 2_000_000,
-  },
-  {
-    timestamp: "2026-04-01T12:01:30Z",
-    event_type: "withdrawal",
-    description: "$4M total withdrawn",
-    eval_result: "warning",
-    threat_level: "HIGH",
-    response_action: "monitor",
-    cumulative_drain: 4_000_000,
-  },
-  {
-    timestamp: "2026-04-01T12:02:00Z",
-    event_type: "withdrawal",
-    description: "$6M total — THRESHOLD BREACHED",
-    eval_result: "breach",
-    threat_level: "CRITICAL",
-    response_action: "pause",
-    cumulative_drain: 6_000_000,
-  },
-  {
-    timestamp: "2026-04-01T12:02:01Z",
-    event_type: "alert",
-    description: "Emergency Telegram alert dispatched to team",
-    eval_result: "breach",
-    threat_level: "CRITICAL",
-    response_action: "pause",
-    cumulative_drain: 6_000_000,
-  },
-];
-
-/** Dummy rules used in the simulation. */
-const DUMMY_RULES_USED: InvariantResponse[] = [
-  {
-    id: "sim-inv-1",
-    protocol_id: "sim-proto",
-    type: "WITHDRAWAL_RATE",
-    threshold: 5_000_000,
-    time_window: 60,
-    action: "pause",
-    enabled: true,
-  },
-  {
-    id: "sim-inv-2",
-    protocol_id: "sim-proto",
-    type: "TVL_DROP",
-    threshold: 10,
-    time_window: 300,
-    action: "pause",
-    enabled: true,
-  },
-];
-
-/** Damage without Killswitch (original Drift hack). */
-const DAMAGE_WITHOUT = 285_000_000;
+import { get } from "@/lib/api";
+import type { SimulationEvent, SimulationResult, InvariantResponse } from "@/types";
 
 /**
  * Simulation page — public route, no auth required.
- * Allows users to adjust parameters and replay the Drift hack simulation.
+ * Fetches simulation data from the API and replays the Drift hack timeline.
  */
 export default function SimulatePage() {
   // Adjustable parameters
@@ -104,45 +22,79 @@ export default function SimulatePage() {
   // Simulation state
   const [hasStarted, setHasStarted] = useState(false);
   const [isLoadingSimulation, setIsLoadingSimulation] = useState(false);
+  const [simulationError, setSimulationError] = useState<string | null>(null);
 
-  const simulation = useSimulation(hasStarted ? DUMMY_TIMELINE : []);
+  // Store fetched simulation data
+  const [timeline, setTimeline] = useState<SimulationEvent[]>([]);
+  const [damageWithout, setDamageWithout] = useState(285_000_000);
+  const [rulesUsed, setRulesUsed] = useState<InvariantResponse[]>([]);
+  const [apiDamageWithKillswitch, setApiDamageWithKillswitch] = useState(0);
+  const [apiAmountSaved, setApiAmountSaved] = useState(0);
+
+  const simulation = useSimulation(hasStarted ? timeline : []);
+
+  // Use a ref to track timeline length for completion check
+  const timelineLengthRef = useRef(0);
+  timelineLengthRef.current = timeline.length;
 
   const isComplete =
     hasStarted &&
-    DUMMY_TIMELINE.length > 0 &&
-    simulation.currentIndex >= DUMMY_TIMELINE.length - 1 &&
+    timeline.length > 0 &&
+    simulation.currentIndex >= timeline.length - 1 &&
     !simulation.isPlaying;
 
-  // Damage with Killswitch = cumulative drain at the pause event
+  // Use API-provided damage values if available, otherwise compute from timeline
   const damageWithKillswitch =
-    isComplete && DUMMY_TIMELINE.length > 0
-      ? DUMMY_TIMELINE[DUMMY_TIMELINE.length - 1].cumulative_drain
-      : 0;
+    isComplete && apiDamageWithKillswitch > 0
+      ? apiDamageWithKillswitch
+      : isComplete && timeline.length > 0
+        ? timeline[timeline.length - 1].cumulative_drain
+        : 0;
+
+  const amountSaved =
+    isComplete && apiAmountSaved > 0
+      ? apiAmountSaved
+      : damageWithout - damageWithKillswitch;
 
   /** Run the simulation with current parameters. */
   const handleRunSimulation = useCallback(async () => {
-    // Log the parameters (will wire to API later)
-    console.log("[SimulatePage] Run simulation with params:", {
-      withdrawal_rate_threshold: Number(withdrawalThreshold),
-      withdrawal_rate_window: Number(withdrawalWindow),
-      tvl_drop_threshold: Number(tvlDropThreshold),
-      tvl_drop_window: Number(tvlDropWindow),
-    });
-
     setIsLoadingSimulation(true);
+    setSimulationError(null);
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    try {
+      // Build query string from parameters
+      const params = new URLSearchParams({
+        withdrawal_rate_threshold: withdrawalThreshold,
+        withdrawal_rate_window: withdrawalWindow,
+        tvl_drop_threshold: tvlDropThreshold,
+        tvl_drop_window: tvlDropWindow,
+      });
 
-    // Reset and start
-    simulation.reset();
-    setHasStarted(true);
-    setIsLoadingSimulation(false);
+      const result = await get<SimulationResult>(
+        `/api/simulate/drift?${params.toString()}`
+      );
 
-    // Small delay to let state settle, then play
-    setTimeout(() => {
-      simulation.play();
-    }, 100);
+      // Store simulation data
+      setTimeline(result.timeline);
+      setDamageWithout(result.damage_without);
+      setRulesUsed(result.rules_used);
+      setApiDamageWithKillswitch(result.damage_with_killswitch);
+      setApiAmountSaved(result.amount_saved);
+
+      // Reset and start playback
+      simulation.reset();
+      setHasStarted(true);
+
+      // Small delay to let state settle, then play
+      setTimeout(() => {
+        simulation.play();
+      }, 100);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to run simulation";
+      setSimulationError(message);
+    } finally {
+      setIsLoadingSimulation(false);
+    }
   }, [
     withdrawalThreshold,
     withdrawalWindow,
@@ -156,7 +108,7 @@ export default function SimulatePage() {
       {/* Page header */}
       <div className="space-y-2">
         <h1 className="text-2xl font-bold text-foreground">
-          Drift Hack Simulation
+          Drift Hack Replay
         </h1>
         <p className="text-sm text-muted-foreground">
           Replay the April 1, 2026 Drift Protocol exploit ($285M lost in 12
@@ -243,6 +195,13 @@ export default function SimulatePage() {
           </div>
         </div>
 
+        {/* Error message */}
+        {simulationError && (
+          <div className="rounded-lg border border-status-red/30 bg-status-red/10 px-3 py-2 text-sm text-status-red">
+            {simulationError}
+          </div>
+        )}
+
         {/* Run Simulation button */}
         <button
           onClick={handleRunSimulation}
@@ -281,14 +240,14 @@ export default function SimulatePage() {
       </div>
 
       {/* Simulation playback area */}
-      {hasStarted && (
+      {hasStarted && timeline.length > 0 && (
         <>
           {/* Controls */}
           <SimulationControls
             isPlaying={simulation.isPlaying}
             speed={simulation.speed}
             currentIndex={simulation.currentIndex}
-            totalEvents={DUMMY_TIMELINE.length}
+            totalEvents={timeline.length}
             onPlay={simulation.play}
             onPause={simulation.pause}
             onReset={simulation.reset}
@@ -299,7 +258,7 @@ export default function SimulatePage() {
 
           {/* Timeline replay */}
           <DriftReplay
-            events={DUMMY_TIMELINE}
+            events={timeline}
             currentIndex={simulation.currentIndex}
           />
 
@@ -307,9 +266,9 @@ export default function SimulatePage() {
           {isComplete && (
             <SimulationSummary
               damageWithKillswitch={damageWithKillswitch}
-              damageWithout={DAMAGE_WITHOUT}
-              amountSaved={DAMAGE_WITHOUT - damageWithKillswitch}
-              rulesUsed={DUMMY_RULES_USED}
+              damageWithout={damageWithout}
+              amountSaved={amountSaved}
+              rulesUsed={rulesUsed}
             />
           )}
         </>

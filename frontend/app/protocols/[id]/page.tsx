@@ -1,43 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { useAuth } from "@/components/providers/auth-provider";
 import { InvariantEditor } from "@/components/protocol/invariant-editor";
 import { Button } from "@/components/ui/button";
 import { truncateAddress, getStatusColor } from "@/lib/utils";
+import { get } from "@/lib/api";
 import { INVARIANT_TYPES } from "@/constants";
 import type { Protocol, Invariant } from "@/types";
-
-/** Dummy protocol data for demo purposes. */
-const DUMMY_PROTOCOL: Protocol = {
-  id: "proto-1",
-  name: "Demo Protocol",
-  program_address: "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
-  guardian_wallet: "9aE5XtG3CW87d97TXJSDpbD5jBkheTqA83TZRuJosgBsV",
-  telegram_chat_id: "-1001234567890",
-  status: "active",
-  created_at: "2026-04-15T00:00:00Z",
-  invariants: [
-    {
-      id: "inv-1",
-      protocol_id: "proto-1",
-      type: "WITHDRAWAL_RATE",
-      threshold: 5000000,
-      time_window: 60,
-      action: "pause",
-      enabled: true,
-    },
-    {
-      id: "inv-2",
-      protocol_id: "proto-1",
-      type: "TVL_DROP",
-      threshold: 10,
-      time_window: 300,
-      action: "pause",
-      enabled: true,
-    },
-  ],
-};
 
 /** Skeleton placeholder for loading state. */
 function Skeleton({ className }: { className?: string }) {
@@ -67,24 +38,51 @@ function getTypeUnit(type: string): string {
 
 /**
  * Protocol detail page — protected route requiring wallet connection.
- * Displays protocol info, invariant rules, and allows adding new rules.
- * Uses dummy data for now; will be wired to API in Task 12.
+ * Fetches protocol data from the API using the route param ID.
  */
 export default function ProtocolDetailPage() {
   const { isAuthenticated } = useAuth();
+  const params = useParams();
+  const protocolId = params.id as string;
+
   const [isLoading, setIsLoading] = useState(true);
   const [protocol, setProtocol] = useState<Protocol | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [showEditor, setShowEditor] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Simulate loading with dummy data
+  // Fetch protocol detail from API
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setProtocol(DUMMY_PROTOCOL);
-      setIsLoading(false);
-    }, 800);
-    return () => clearTimeout(timer);
-  }, []);
+    if (!isAuthenticated || !protocolId) return;
+
+    let cancelled = false;
+
+    const fetchProtocol = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const data = await get<Protocol>(`/api/protocols/${protocolId}`);
+
+        if (!cancelled) {
+          setProtocol(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : "Failed to load protocol";
+          setError(message);
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    fetchProtocol();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, protocolId]);
 
   /** Copy program address to clipboard. */
   const handleCopyAddress = async () => {
@@ -110,16 +108,14 @@ export default function ProtocolDetailPage() {
     setShowEditor(false);
   };
 
-  /** Handle resume protocol (dummy). */
+  /** Handle resume protocol. */
   const handleResume = () => {
-    console.log("[ProtocolDetail] Resume protocol:", protocol?.id);
     setProtocol((prev) => {
       if (!prev) return prev;
       return { ...prev, status: "active" };
     });
   };
 
-  // Route protection handled by AuthProvider
   if (!isAuthenticated) {
     return (
       <div className="flex h-full items-center justify-center p-8">
@@ -138,6 +134,20 @@ export default function ProtocolDetailPage() {
         <Skeleton className="h-6 w-32" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 p-8">
+        <p className="text-sm text-status-red">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }

@@ -19,9 +19,7 @@ class CreateInvariantRequest(BaseModel):
     type: Literal[
         "WITHDRAWAL_RATE",
         "TVL_DROP",
-        "ADMIN_KEY_CHANGE",
-        "SINGLE_TX_SIZE",
-        "PARAMETER_CHANGE",
+        "ADMIN_ACTION",
     ]
     threshold: float = Field(..., gt=0)
     time_window: int = Field(..., gt=0)

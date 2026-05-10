@@ -52,6 +52,9 @@ be-seed: ## Seed database with sample data
 be-test: ## Run backend tests
 	cd backend && pytest tests/ -v
 
+be-attack: ## Run attack simulator for live demo
+	cd backend && python scripts/simulate_attack.py
+
 # ---------------------------------------------------------------------------
 # Smart Contract (Anchor)
 # ---------------------------------------------------------------------------

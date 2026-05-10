@@ -43,7 +43,7 @@ export const LANDING_CONTENT = {
   /** Call-to-action buttons. */
   cta: {
     primary: "Connect Wallet",
-    secondary: "Try Drift Simulation →",
+    secondary: "Try Drift Replay →",
   },
 
   /** Key statistics shown on the landing page. */

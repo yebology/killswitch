@@ -2,9 +2,7 @@
 export type InvariantType =
   | "WITHDRAWAL_RATE"
   | "TVL_DROP"
-  | "ADMIN_KEY_CHANGE"
-  | "SINGLE_TX_SIZE"
-  | "PARAMETER_CHANGE";
+  | "ADMIN_ACTION";
 
 /** Action to take when an invariant rule is breached. */
 export type InvariantAction = "pause" | "alert";

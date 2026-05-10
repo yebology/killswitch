@@ -12,7 +12,7 @@ from app.clients.geyser import GeyserClient
 from app.clients.solana import SolanaClient
 from app.clients.telegram import TelegramClient
 from app.core.config import Settings
-from app.core.database import Base, engine, init_db
+from app.core.database import Base, init_db
 from app.repositories.incident import IncidentRepository
 from app.repositories.invariant import InvariantRepository
 from app.repositories.protocol import ProtocolRepository
@@ -50,7 +50,8 @@ async def lifespan(app: FastAPI):
     logger.info("Database initialized: %s", settings.db_host)
 
     # Create tables (hackathon shortcut — no Alembic in dev)
-    async with engine.begin() as conn:
+    from app.core.database import engine as _engine
+    async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created/verified")
 
@@ -99,6 +100,10 @@ async def lifespan(app: FastAPI):
         await _sentinel.start()
         logger.info("Sentinel service started")
 
+        # Set sentinel reference for internal inject endpoint (demo)
+        from app.api.routes.internal import set_sentinel_ref
+        set_sentinel_ref(_sentinel)
+
     yield
 
     # Shutdown
@@ -106,8 +111,9 @@ async def lifespan(app: FastAPI):
         await _sentinel.stop()
         logger.info("Sentinel service stopped")
 
-    if engine:
-        await engine.dispose()
+    from app.core.database import engine as _eng
+    if _eng:
+        await _eng.dispose()
         logger.info("Database engine disposed")
 
 

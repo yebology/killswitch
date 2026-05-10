@@ -4,9 +4,7 @@ use anchor_lang::prelude::*;
 pub enum InvariantType {
     WithdrawalRate,
     TvlDrop,
-    AdminKeyChange,
-    SingleTxSize,
-    ParameterChange,
+    AdminAction,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Eq, Debug)]

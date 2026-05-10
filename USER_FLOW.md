@@ -16,10 +16,10 @@ Dokumen ini menjelaskan semua user flow secara detail, termasuk interaksi antar 
    - Hero: "The $285M Drift hack took 12 minutes. Killswitch would have stopped it in 30 seconds."
    - Features: Real-time Monitoring, Anomaly Detection, Auto-Pause, Instant Alerts
    - CTA: "Connect Wallet" button
-   - Secondary CTA: "Try Drift Simulation →" link ke /simulate
+   - Secondary CTA: "Try Drift Replay →" link ke /simulate
 4. Pengunjung bisa:
    a. Klik "Connect Wallet" → masuk Flow 2
-   b. Klik "Try Drift Simulation" → masuk Flow 7
+   b. Klik "Try Drift Replay" → masuk Flow 7
    c. Tutup browser → selesai
 ```
 
@@ -232,7 +232,7 @@ SKENARIO: Attacker mulai drain dana dari protocol
 1. Attacker kirim TX: ubah admin key
 2. Geyser Client terima TX → forward ke Sentinel
 3. Evaluator cek rules:
-   - ADMIN_KEY_CHANGE: admin key berubah → BREACH (action: alert)
+   - ADMIN_ACTION: admin key berubah → BREACH (action: alert)
    - WITHDRAWAL_RATE: $0 (0%) → PASS
    - TVL_DROP: 0% → PASS
 4. Combined threat level: ELEVATED (1 breach tapi action = alert, bukan pause)
@@ -253,11 +253,11 @@ SKENARIO: Attacker mulai drain dana dari protocol
 === T+0:30 — Parameter Change + Withdrawal Mulai ===
 7. Attacker kirim TX: hapus withdrawal limits
 8. Evaluator cek rules:
-   - PARAMETER_CHANGE: safety params modified → BREACH (action: alert)
+   - : safety params modified → BREACH (action: alert)
    - WITHDRAWAL_RATE: $500K (10% of $5M) → WARNING (>50% = false, tapi ada withdrawal)
    - TVL_DROP: 0.5% → PASS
 9. Combined threat level:
-   - PARAMETER_CHANGE triggered + withdrawal mulai naik
+   -  triggered + withdrawal mulai naik
    - Belum escalate karena withdrawal belum >50% threshold
    - Threat level: HIGH
 10. Telegram alert: "🔴 ALERT — Safety parameters modified"
@@ -268,16 +268,16 @@ SKENARIO: Attacker mulai drain dana dari protocol
 13. Evaluator cek rules:
     - WITHDRAWAL_RATE: $3M (60% of $5M threshold) → WARNING (>50%)
     - TVL_DROP: 4% (40% of 10% threshold) → PASS
-    - PARAMETER_CHANGE: masih aktif dari sebelumnya
+    - : masih aktif dari sebelumnya
 14. Combined threat level:
-    - PARAMETER_CHANGE triggered + WITHDRAWAL_RATE warning (>50%)
+    -  triggered + WITHDRAWAL_RATE warning (>50%)
     - ESCALATION RULE: admin/parameter change + any warning → CRITICAL
     - 🔴 ESCALATE KE CRITICAL
 15. Sentinel:
     a. Evaluator return breach result:
        { status: "breach", threat_level: "CRITICAL",
          escalation_reason: "Parameter change + withdrawal rate warning (60%)",
-         contributing_rules: [PARAMETER_CHANGE, WITHDRAWAL_RATE] }
+         contributing_rules: [, WITHDRAWAL_RATE] }
     b. Circuit Breaker:
        - Construct trigger_pause transaction
        - Sign dengan SENTINEL_KEYPAIR
@@ -400,26 +400,26 @@ SKENARIO: Attacker mulai drain dana dari protocol
 
 ---
 
-## Flow 8: Drift Hack Simulation (Demo Publik)
+## Flow 8: Drift Hack Replay (Demo Publik)
 
 **Aktor:** Pengunjung (tanpa wallet, tanpa auth)
 **Route:** `/simulate`
 
 ```
-1. Pengunjung buka /simulate (atau klik "Try Drift Simulation" dari landing page)
+1. Pengunjung buka /simulate (atau klik "Try Drift Replay" dari landing page)
 2. Halaman tampil:
    ┌─────────────────────────────────────────┐
-   │  🔄 Drift Hack Simulation               │
+   │  🔄 Drift Hack Replay               │
    │                                          │
    │  Adjust Parameters:                      │
    │  Withdrawal Rate: [$5,000,000] per [60]s │
    │  TVL Drop: [10]% per [300]s              │
    │                                          │
-   │  [Run Simulation]                        │
+   │  [Run Replay]                        │
    └─────────────────────────────────────────┘
 
 3. User bisa adjust parameter atau pakai default
-4. User klik "Run Simulation"
+4. User klik "Run Replay"
 5. Frontend kirim ke backend:
    GET /api/simulate/drift?withdrawal_rate_threshold=5000000&withdrawal_rate_window=60&tvl_drop_threshold=10&tvl_drop_window=300
 6. Backend Simulator proses:
@@ -585,7 +585,7 @@ SKENARIO: Attacker mulai drain dana dari protocol
 │     │      Guardian Program (On-chain Resume)                    │
 │     │                                                            │
 │     ▼                                                            │
-│  Drift Simulation (Public Demo)                                  │
+│  Drift Replay (Public Demo)                                  │
 │                                                                   │
 └──────────────────────────────────────────────────────────────────┘
 ```

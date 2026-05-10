@@ -28,3 +28,6 @@ contracts/guardian/.anchor/
 
 # Docker
 *.log
+
+# Personal notes
+EXPLAIN.md

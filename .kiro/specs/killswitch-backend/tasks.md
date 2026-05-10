@@ -2,7 +2,7 @@
 
 ## Overview
 
-Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti clean architecture. Tasks disusun secara incremental — setiap task membangun di atas task sebelumnya, dimulai dari infrastructure foundation hingga wiring semua komponen. Scope di-trim untuk hackathon: 3 entitas (Protocol, Invariant, Incident), Telegram only alerts, wallet-based auth (simplified), POST+GET invariant only, severity escalation, dan adjustable simulation parameters.
+Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti clean architecture. Tasks disusun secara incremental — setiap task membangun di atas task sebelumnya, dimulai dari infrastructure foundation hingga wiring semua komponen. Scope di-trim untuk hackathon: 3 entitas (Protocol, Invariant, Incident), Telegram only alerts, wallet-based auth (simplified), POST+GET invariant only, severity escalation, dan adjustable replay parameters.
 
 ### Tech Stack
 | Layer | Technology |
@@ -39,7 +39,7 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - _Requirements: 15.4_
 
   - [x] 1.4 Create `backend/app/constants.py` — Invariant types, errors, success messages
-    - Define INVARIANT_TYPES set: {"WITHDRAWAL_RATE", "TVL_DROP", "ADMIN_KEY_CHANGE", "SINGLE_TX_SIZE", "PARAMETER_CHANGE"}
+    - Define INVARIANT_TYPES set: {"WITHDRAWAL_RATE", "TVL_DROP", "ADMIN_ACTION", "", ""}
     - Define error message constants dan success message constants
     - _Requirements: 6.2_
 
@@ -79,7 +79,7 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Import Protocol, Invariant, Incident untuk Alembic auto-detection
     - _Requirements: 2.1_
 
-  - [ ] 2.6 Setup Alembic migrations
+  - [x] 2.6 Setup Alembic migrations
     - `alembic init backend/alembic`
     - Configure `alembic.ini` dan `alembic/env.py` untuk async SQLAlchemy
     - Generate initial migration: `alembic revision --autogenerate -m "initial"`
@@ -132,8 +132,8 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Methods: create, find_by_id, find_by_protocol_id
     - _Requirements: 10.4_
 
-- [ ] 6. External Clients
-  - [ ] 6.1 Create `backend/app/clients/geyser.py` — Geyser/WebSocket TX stream client
+- [x] 6. External Clients
+  - [x] 6.1 Create `backend/app/clients/geyser.py` — Geyser/WebSocket TX stream client
     - Async WebSocket connection ke SOLANA_WS_URL menggunakan `websockets` library
     - Subscribe/unsubscribe per program address
     - Parse transaction data (instruction type, accounts, amounts)
@@ -141,23 +141,23 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Reconnect setelah 5 detik (asyncio.sleep) jika connection lost
     - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5_
 
-  - [ ] 6.2 Create `backend/app/clients/solana.py` — Solana RPC client
+  - [x] 6.2 Create `backend/app/clients/solana.py` — Solana RPC client
     - Async client menggunakan solders + solana-py
     - trigger_pause: construct + sign + send trigger_pause TX ke Guardian Program
     - resume: construct + send resume TX
     - Sign dengan SENTINEL_KEYPAIR (parsed via solders.Keypair)
     - _Requirements: 10.1, 10.2, 10.6_
 
-  - [ ] 6.3 Create `backend/app/clients/telegram.py` — Telegram Bot API client
+  - [x] 6.3 Create `backend/app/clients/telegram.py` — Telegram Bot API client
     - Async HTTP client menggunakan httpx
     - send_message: POST ke https://api.telegram.org/bot{token}/sendMessage
     - _Requirements: 11.1_
 
-- [ ] 7. Checkpoint — Ensure all tests pass
+- [x] 7. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 8. Core Services — Protocol, Invariant, Incident
-  - [ ] 8.1 Create `backend/app/services/protocol.py` — Protocol service
+- [x] 8. Core Services — Protocol, Invariant, Incident
+  - [x] 8.1 Create `backend/app/services/protocol.py` — Protocol service
     - register_protocol: create protocol dengan guardian_wallet dari authenticated user
     - get_protocol: get by ID, verify ownership via guardian_wallet
     - list_protocols: list by guardian_wallet
@@ -172,7 +172,7 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Gunakan hypothesis untuk generate random wallets dan program addresses
     - **Validates: Requirements 4.4, 5.2, 5.3**
 
-  - [ ] 8.3 Create `backend/app/services/invariant.py` — Invariant service
+  - [x] 8.3 Create `backend/app/services/invariant.py` — Invariant service
     - create_invariant: validate type (Pydantic Literal handles this), validate threshold > 0 (Pydantic gt=0), create record
     - list_invariants: list by protocol ID
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
@@ -182,33 +182,33 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Test valid types succeed, invalid types fail, threshold <= 0 fails
     - **Validates: Requirements 6.2, 6.3, 6.4**
 
-  - [ ] 8.5 Create `backend/app/services/incident.py` — Incident service
+  - [x] 8.5 Create `backend/app/services/incident.py` — Incident service
     - create_incident: create incident record dengan tx_hashes, action_taken, damage_estimate, escalation_reason
     - _Requirements: 10.4_
 
-- [ ] 9. Core Services — Evaluator with Severity Escalation
-  - [ ] 9.1 Create `backend/app/services/evaluator.py` — Invariant evaluation engine
+- [x] 9. Core Services — Evaluator with Severity Escalation
+  - [x] 9.1 Create `backend/app/services/evaluator.py` — Invariant evaluation engine
     - Strategy pattern: dict mapping invariant type → async evaluation function
     - WITHDRAWAL_RATE: sum withdrawals in time_window, compare threshold
     - TVL_DROP: calculate % TVL change in time_window, compare threshold
-    - ADMIN_KEY_CHANGE: detect admin/authority instruction changes
-    - SINGLE_TX_SIZE: compare individual tx amount vs threshold
-    - PARAMETER_CHANGE: detect safety parameter modifications
+    - ADMIN_ACTION: detect admin/authority instruction changes
+    - : compare individual tx amount vs threshold
+    - : detect safety parameter modifications
     - Return RuleResult dataclass per rule
     - _Requirements: 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7, 8.8_
 
-  - [ ] 9.2 Implement severity escalation logic in evaluator
+  - [x] 9.2 Implement severity escalation logic in evaluator
     - Calculate warning count (measured_value > 50% * threshold)
     - Classify threat level: LOW (0), ELEVATED (1), HIGH (2+), CRITICAL (breach/escalation)
     - Auto-escalate: 2+ warnings → CRITICAL
-    - Auto-escalate: ADMIN_KEY_CHANGE/PARAMETER_CHANGE + any warning → CRITICAL
+    - Auto-escalate: ADMIN_ACTION/ + any warning → CRITICAL
     - Return EvaluationResult dataclass dengan all contributing rule IDs dan escalation_reason
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
   - [ ]* 9.3 Write property tests for Evaluator
     - **Property 7: WITHDRAWAL_RATE Evaluation Correctness**
     - **Property 8: TVL_DROP Evaluation Correctness**
-    - **Property 9: SINGLE_TX_SIZE Evaluation Correctness**
+    - **Property 9:  Evaluation Correctness**
     - Gunakan hypothesis @given() dengan float/list strategies
     - **Validates: Requirements 8.2, 8.3, 8.5**
 
@@ -217,14 +217,14 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Generate random sets of RuleResults, verify threat level classification
     - **Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5**
 
-- [ ] 10. Core Services — Circuit Breaker, Telegram Dispatcher, Simulator
-  - [ ] 10.1 Create `backend/app/services/circuit_breaker.py` — Circuit breaker service
+- [x] 10. Core Services — Circuit Breaker, Telegram Dispatcher, Simulator
+  - [x] 10.1 Create `backend/app/services/circuit_breaker.py` — Circuit breaker service
     - trigger_pause: call Solana client → update protocol status to "paused" → create incident record
     - Handle on-chain TX failure: log error + dispatch emergency Telegram alert
     - resume: call Solana client → update protocol status to "active"
     - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7_
 
-  - [ ] 10.2 Create `backend/app/services/telegram.py` — Telegram alert dispatcher
+  - [x] 10.2 Create `backend/app/services/telegram.py` — Telegram alert dispatcher
     - dispatch_incident_alert: format message (protocol name, incident type, invariant details, action, damage, timestamp)
     - dispatch_escalation_alert: include escalation_reason dan contributing rules
     - dispatch_emergency_alert: for circuit breaker failures
@@ -236,7 +236,7 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Generate random incidents/protocols, verify message contains all required fields
     - **Validates: Requirements 11.2, 11.3**
 
-  - [ ] 10.4 Create `backend/app/services/simulator.py` — Drift hack replay engine
+  - [x] 10.4 Create `backend/app/services/simulator.py` — Drift hack replay engine
     - run_drift_simulation: accept SimulationParams (optional fields, use defaults if None)
     - Defaults: withdrawal_rate_threshold=$5M, withdrawal_rate_window=60s, tvl_drop_threshold=10%, tvl_drop_window=300s
     - Replay pre-configured Drift hack timeline events through evaluator
@@ -249,24 +249,24 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Verify: amount_saved = damage_without - damage_with_killswitch, timeline entries complete
     - **Validates: Requirements 13.2, 13.3, 13.5**
 
-- [ ] 11. Checkpoint — Ensure all tests pass
+- [x] 11. Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. Auth — Security Utilities, Dependency, Route
-  - [ ] 12.1 Create `backend/app/core/security.py` — Ed25519 signature verification
+- [x] 12. Auth — Security Utilities, Dependency, Route
+  - [x] 12.1 Create `backend/app/core/security.py` — Ed25519 signature verification
     - verify_signature(wallet_address, message, signature) → bool
     - Gunakan solders atau nacl untuk ed25519 verification
     - Decode Base58 signature dan public key
     - _Requirements: 4.1_
 
-  - [ ] 12.2 Create `backend/app/api/deps.py` — FastAPI dependencies
+  - [x] 12.2 Create `backend/app/api/deps.py` — FastAPI dependencies
     - get_current_wallet: extract wallet address dari request header, verify against guardian_wallets
     - get_db_session: yield AsyncSession dari session factory
     - get_protocol_service, get_invariant_service, get_simulator_service: factory dependencies
     - Raise HTTPException(401) jika wallet invalid atau bukan guardian
     - _Requirements: 4.4_
 
-  - [ ] 12.3 Create `backend/app/api/routes/auth.py` — Auth router
+  - [x] 12.3 Create `backend/app/api/routes/auth.py` — Auth router
     - POST /api/auth/verify: verify wallet signature via security.verify_signature, return AuthResponse
     - Return 401 jika signature invalid
     - _Requirements: 4.1, 4.2, 4.3_
@@ -276,8 +276,8 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Generate random keypairs + messages, sign, verify. Also test corrupted signatures fail.
     - **Validates: Requirements 4.1, 4.2**
 
-- [ ] 13. API Routes (Handlers)
-  - [ ] 13.1 Create `backend/app/api/routes/protocol.py` — Protocol router
+- [x] 13. API Routes (Handlers)
+  - [x] 13.1 Create `backend/app/api/routes/protocol.py` — Protocol router
     - POST /api/protocols: register protocol (Depends get_current_wallet, body: RegisterProtocolRequest)
     - GET /api/protocols: list protocols by guardian wallet
     - GET /api/protocols/{id}: get protocol detail + invariants
@@ -286,18 +286,18 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Return APIResponse envelope via success_response/error_response helpers
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 10.6_
 
-  - [ ] 13.2 Create `backend/app/api/routes/invariant.py` — Invariant router
+  - [x] 13.2 Create `backend/app/api/routes/invariant.py` — Invariant router
     - POST /api/protocols/{id}/invariants: add invariant rule (body: CreateInvariantRequest)
     - GET /api/protocols/{id}/invariants: list invariant rules
     - Protected via Depends(get_current_wallet)
     - _Requirements: 6.1, 6.3, 6.4, 6.5_
 
-  - [ ] 13.3 Create `backend/app/api/routes/simulate.py` — Simulation router
-    - GET /api/simulate/drift: run Drift hack simulation (query params: SimulationParams)
+  - [x] 13.3 Create `backend/app/api/routes/simulate.py` — Simulation router
+    - GET /api/simulate/drift: run Drift hack replay (query params: SimulationParams)
     - No auth required (public endpoint)
     - _Requirements: 13.1, 13.2, 13.6_
 
-  - [ ] 13.4 Create `backend/app/api/routes/health.py` — Health check router
+  - [x] 13.4 Create `backend/app/api/routes/health.py` — Health check router
     - GET /api/health: return status "ok" + timestamp, no auth
     - _Requirements: 14.1_
 
@@ -306,8 +306,8 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Test success responses have status="success" + data, error responses have status="error" + data=null
     - **Validates: Requirements 14.2, 14.3**
 
-- [ ] 14. WebSocket Manager
-  - [ ] 14.1 Create `backend/app/ws/manager.py` — WebSocket connection manager
+- [x] 14. WebSocket Manager
+  - [x] 14.1 Create `backend/app/ws/manager.py` — WebSocket connection manager
     - Per-protocol client management (dict[UUID, set[WebSocket]])
     - connect: accept + register WebSocket for protocol_id
     - disconnect: remove WebSocket from protocol subscription
@@ -316,14 +316,14 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - asyncio.Lock untuk thread-safe access
     - _Requirements: 12.1, 12.2, 12.3, 12.4_
 
-  - [ ] 14.2 Create `backend/app/ws/routes.py` — WebSocket route
+  - [x] 14.2 Create `backend/app/ws/routes.py` — WebSocket route
     - ws://host/ws?protocol_id=ID
     - Accept WebSocket connection, register with manager
     - Keep-alive loop, handle disconnect
     - _Requirements: 12.1_
 
-- [ ] 15. Sentinel Service (Orchestrator)
-  - [ ] 15.1 Create `backend/app/services/sentinel.py` — Sentinel monitoring loop
+- [x] 15. Sentinel Service (Orchestrator)
+  - [x] 15.1 Create `backend/app/services/sentinel.py` — Sentinel monitoring loop
     - start: load active protocols → subscribe to Geyser → register on_transaction callback
     - on_transaction: match to protocol → evaluate via Evaluator → handle result
     - If CRITICAL + action "pause": trigger circuit breaker → create incident → dispatch Telegram → broadcast WS
@@ -333,18 +333,18 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Jalankan sebagai asyncio.Task (background task)
     - _Requirements: 7.1, 7.2, 7.4, 8.1, 9.3, 10.1, 11.1, 11.5, 12.2, 12.3_
 
-- [ ] 16. Application Wiring dan Entry Point
-  - [ ] 16.1 Create `backend/app/api/routes/__init__.py` — Route aggregator
+- [x] 16. Application Wiring dan Entry Point
+  - [x] 16.1 Create `backend/app/api/routes/__init__.py` — Route aggregator
     - Import dan include semua routers (auth, protocol, invariant, simulate, health)
     - Create main api_router yang includes semua sub-routers dengan prefix /api
     - _Requirements: 15.2_
 
-  - [ ] 16.2 Create `backend/app/api/middleware.py` — CORS dan exception handlers
+  - [x] 16.2 Create `backend/app/api/middleware.py` — CORS dan exception handlers
     - Configure CORSMiddleware dengan allowed_origins dari Settings
     - Register global exception handler untuk AppError → APIResponse envelope
     - _Requirements: 1.5, 15.4_
 
-  - [ ] 16.3 Create `backend/main.py` — FastAPI application entry point
+  - [x] 16.3 Create `backend/main.py` — FastAPI application entry point
     - Create FastAPI app instance
     - Add CORS middleware
     - Include api_router
@@ -353,23 +353,23 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - Uvicorn runner: `uvicorn main:app --host 0.0.0.0 --port {APP_PORT}`
     - _Requirements: 1.3, 1.4, 1.5, 15.2, 15.3_
 
-- [ ] 17. Docker dan Environment Setup
-  - [ ] 17.1 Create `backend/Dockerfile` dan `backend/docker-compose.yml`
+- [x] 17. Docker dan Environment Setup
+  - [x] 17.1 Create `backend/Dockerfile` dan `backend/docker-compose.yml`
     - Dockerfile: Python 3.12 slim base, pip install requirements, copy app, uvicorn entrypoint
     - docker-compose: PostgreSQL service + backend service + volume for DB data
     - _Requirements: 1.1_
 
-  - [ ] 17.2 Create `backend/.env.example` — Environment variable template
+  - [x] 17.2 Create `backend/.env.example` — Environment variable template
     - Document semua required env vars dengan contoh values
     - _Requirements: 1.1_
 
-- [ ] 18. CLI Commands dan Utilities
-  - [ ] 18.1 Create `backend/seeds/__init__.py` dan update seed script
+- [x] 18. CLI Commands dan Utilities
+  - [x] 18.1 Create `backend/seeds/__init__.py` dan update seed script
     - Async seed function yang bisa dipanggil via `python -m seeds.seed`
     - Load config → connect DB → run seed → close
     - _Requirements: 2.2, 2.3_
 
-  - [ ] 18.2 Create `backend/Makefile` — Development commands
+  - [x] 18.2 Create `backend/Makefile` — Development commands
     - Targets: help, install, dev, build, test, lint, clean, migrate, seed, docker-up, docker-down
     - `make dev` → uvicorn main:app --reload
     - `make test` → pytest tests/ -v
@@ -377,8 +377,8 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - `make seed` → python -m seeds.seed
     - _Requirements: 15.3_
 
-- [ ] 19. Test Configuration
-  - [ ] 19.1 Create `backend/tests/conftest.py` — Shared pytest fixtures
+- [x] 19. Test Configuration
+  - [x] 19.1 Create `backend/tests/conftest.py` — Shared pytest fixtures
     - Async database session fixture (SQLite in-memory atau test PostgreSQL)
     - FastAPI TestClient fixture
     - Mock client fixtures (Geyser, Solana, Telegram)
@@ -386,13 +386,13 @@ Implementasi Sentinel Service menggunakan **Python 3.12+ dan FastAPI** mengikuti
     - pytest-asyncio configuration
     - _Requirements: Testing infrastructure_
 
-  - [ ] 19.2 Create `backend/pytest.ini` atau `backend/pyproject.toml` [tool.pytest] — pytest config
+  - [x] 19.2 Create `backend/pytest.ini` atau `backend/pyproject.toml` [tool.pytest] — pytest config
     - Configure asyncio_mode = "auto"
     - Configure test paths
     - Configure hypothesis settings (max_examples=100)
     - _Requirements: Testing infrastructure_
 
-- [ ] 20. Final Checkpoint — Ensure all tests pass
+- [x] 20. Final Checkpoint — Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

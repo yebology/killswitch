@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { post } from "@/lib/api";
 import { INVARIANT_TYPES } from "@/constants";
 import type {
   InvariantType,
@@ -20,7 +21,7 @@ interface InvariantEditorProps {
 /**
  * Form for adding a new invariant rule to a protocol.
  * Pre-fills threshold and time window from INVARIANT_TYPES defaults when type changes.
- * Currently uses console.log (will wire to API later).
+ * Posts to the backend API on submit.
  */
 export function InvariantEditor({ protocolId, onSuccess }: InvariantEditorProps) {
   const [type, setType] = useState<InvariantType>(INVARIANT_TYPES[0].value);
@@ -67,7 +68,7 @@ export function InvariantEditor({ protocolId, onSuccess }: InvariantEditorProps)
     setTimeWindowError(null);
   }, []);
 
-  /** Handle form submission — dummy data for now. */
+  /** Handle form submission — posts to real API. */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setToast(null);
@@ -94,9 +95,6 @@ export function InvariantEditor({ protocolId, onSuccess }: InvariantEditorProps)
 
     setIsSubmitting(true);
 
-    // Simulate network delay
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
     const body: CreateInvariantRequest = {
       type,
       threshold: thresholdNum,
@@ -104,23 +102,21 @@ export function InvariantEditor({ protocolId, onSuccess }: InvariantEditorProps)
       action,
     };
 
-    // Dummy: log data and call onSuccess (will wire to API later)
-    console.log("[InvariantEditor] Submit:", { protocolId, ...body });
+    try {
+      const invariant = await post<Invariant>(
+        `/api/protocols/${protocolId}/invariants`,
+        body
+      );
 
-    const dummyInvariant: Invariant = {
-      id: `inv-${Date.now()}`,
-      protocol_id: protocolId,
-      type,
-      threshold: thresholdNum,
-      time_window: timeWindowNum,
-      action,
-      enabled: true,
-    };
-
-    setToast({ type: "success", message: "Rule added successfully!" });
-    resetForm();
-    setIsSubmitting(false);
-    onSuccess(dummyInvariant);
+      setToast({ type: "success", message: "Rule added successfully!" });
+      resetForm();
+      onSuccess(invariant);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to add rule";
+      setToast({ type: "error", message });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const selectedTypeInfo = INVARIANT_TYPES.find((t) => t.value === type);

@@ -208,7 +208,7 @@ Implementasi frontend dashboard Killswitch menggunakan Next.js 16 (App Router) +
     - For any valid protocol object, rendered page SHALL contain protocol name, program address, status, and invariant rules list
     - **Validates: Requirements 7.4**
 
-- [x] 9. Simulation page and components
+- [x] 9. Replay page and components
   - [x] 9.1 Create SimulationControls in `frontend/components/simulate/simulation-controls.tsx`
     - Props: isPlaying, speed, currentIndex, totalEvents, onPlay, onPause, onReset, onSpeedChange
     - Play/Pause toggle button, speed selector (1x/2x/4x), reset button
@@ -235,10 +235,10 @@ Implementasi frontend dashboard Killswitch menggunakan Next.js 16 (App Router) +
     - amount_saved SHALL equal damage_without - damage_with_killswitch; damage_without SHALL be $285M; damage_with_killswitch SHALL be ≥ 0 and < damage_without
     - **Validates: Requirements 8.7**
 
-  - [x] 9.5 Create Simulation page in `frontend/app/simulate/page.tsx`
+  - [x] 9.5 Create Replay page in `frontend/app/simulate/page.tsx`
     - Public route — no auth required
     - Input fields: withdrawal rate threshold (default $5M), withdrawal rate window (default 60s), TVL drop threshold (default 10%), TVL drop window (default 300s)
-    - "Run Simulation" button → GET `/api/simulate/drift` with params
+    - "Run Replay" button → GET `/api/simulate/drift` with params
     - Compose: SimulationControls, DriftReplay, SimulationSummary
     - Loading state during API call
     - Allow parameter adjustment and re-run
@@ -287,9 +287,9 @@ Implementasi frontend dashboard Killswitch menggunakan Next.js 16 (App Router) +
     - Handle loading skeletons during initial connection
     - _Requirements: 6.1, 6.2, 6.9_
 
-  - [x] 12.2 Wire simulation page to useSimulation hook
+  - [x] 12.2 Wire replay page to useSimulation hook
     - Connect DriftReplay and SimulationControls to hook state and actions
-    - Wire "Run Simulation" to API client GET call
+    - Wire "Run Replay" to API client GET call
     - Display SimulationSummary after simulation completes
     - _Requirements: 8.3, 8.5, 8.6, 8.7_
 

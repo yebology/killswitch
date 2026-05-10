@@ -1,6 +1,6 @@
 import type { APIEnvelope } from "@/types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** Stored wallet address used as auth identity. */
 let walletAddress: string | null = null;

@@ -21,7 +21,7 @@ Desain ini di-trim untuk fokus pada demo path hackathon:
 - **Auth**: Wallet address sebagai identity, tanpa session token management
 - **Invariant CRUD**: POST + GET only (tanpa PUT/DELETE)
 - **Tanpa**: incident list/detail endpoints, monitoring status endpoint
-- **Termasuk**: Severity escalation (multi-signal correlation), adjustable simulation parameters
+- **Termasuk**: Severity escalation (multi-signal correlation), adjustable replay parameters
 
 ### Keputusan Desain Utama
 
@@ -427,9 +427,9 @@ class EvaluatorService:
         self.strategies: dict[str, EvaluationStrategy] = {
             "WITHDRAWAL_RATE": self._eval_withdrawal_rate,
             "TVL_DROP": self._eval_tvl_drop,
-            "ADMIN_KEY_CHANGE": self._eval_admin_key_change,
-            "SINGLE_TX_SIZE": self._eval_single_tx_size,
-            "PARAMETER_CHANGE": self._eval_parameter_change,
+            "ADMIN_ACTION": self._eval_admin_key_change,
+            "": self._eval_single_tx_size,
+            "": self._eval_parameter_change,
         }
 ```
 
@@ -450,9 +450,9 @@ class EvaluatorService:
 **Strategy per tipe invariant:**
 - `WITHDRAWAL_RATE`: Hitung total withdrawal dalam time_window → bandingkan threshold
 - `TVL_DROP`: Hitung persentase penurunan TVL dalam time_window → bandingkan threshold
-- `ADMIN_KEY_CHANGE`: Deteksi instruction type admin/authority change → breach jika terdeteksi
-- `SINGLE_TX_SIZE`: Bandingkan tx.amount langsung dengan threshold
-- `PARAMETER_CHANGE`: Deteksi instruction type parameter modification → breach jika terdeteksi
+- `ADMIN_ACTION`: Deteksi instruction type admin/authority change → breach jika terdeteksi
+- ``: Bandingkan tx.amount langsung dengan threshold
+- ``: Deteksi instruction type parameter modification → breach jika terdeteksi
 
 #### Simulator (dengan Adjustable Parameters)
 
@@ -718,8 +718,8 @@ class RegisterProtocolRequest(BaseModel):
 
 class CreateInvariantRequest(BaseModel):
     type: Literal[
-        "WITHDRAWAL_RATE", "TVL_DROP", "ADMIN_KEY_CHANGE",
-        "SINGLE_TX_SIZE", "PARAMETER_CHANGE"
+        "WITHDRAWAL_RATE", "TVL_DROP", "ADMIN_ACTION",
+        "", ""
     ]
     threshold: float = Field(..., gt=0)
     time_window: int = Field(..., gt=0)
@@ -822,7 +822,7 @@ def error_response(message: str, status_code: int = 400) -> JSONResponse:
 ```
 Public Routes:
   GET  /api/health                        → Health check
-  GET  /api/simulate/drift                → Drift hack simulation (adjustable params)
+  GET  /api/simulate/drift                → Drift hack replay (adjustable params)
   POST /api/auth/verify                   → Verify wallet signature
 
 Protected Routes (Wallet Auth Dependency):
@@ -917,7 +917,7 @@ class Settings(BaseSettings):
 
 ### Property 6: Invariant Input Validation
 
-*For any* string yang merupakan anggota set {WITHDRAWAL_RATE, TVL_DROP, ADMIN_KEY_CHANGE, SINGLE_TX_SIZE, PARAMETER_CHANGE}, pembuatan invariant dengan threshold > 0 SHALL berhasil. *For any* string yang bukan anggota set tersebut, ATAU threshold ≤ 0, pembuatan invariant SHALL gagal dengan error 400.
+*For any* string yang merupakan anggota set {WITHDRAWAL_RATE, TVL_DROP, ADMIN_ACTION, , }, pembuatan invariant dengan threshold > 0 SHALL berhasil. *For any* string yang bukan anggota set tersebut, ATAU threshold ≤ 0, pembuatan invariant SHALL gagal dengan error 400.
 
 **Validates: Requirements 6.2, 6.3, 6.4**
 
@@ -933,7 +933,7 @@ class Settings(BaseSettings):
 
 **Validates: Requirements 8.3**
 
-### Property 9: SINGLE_TX_SIZE Evaluation Correctness
+### Property 9:  Evaluation Correctness
 
 *For any* transaksi dengan amount tertentu dan threshold yang dikonfigurasi, Evaluator SHALL mengembalikan "breach" jika dan hanya jika amount transaksi melebihi threshold.
 
@@ -944,7 +944,7 @@ class Settings(BaseSettings):
 *For any* set of rule evaluation results dimana setiap rule memiliki measured value dan threshold:
 - Warning count SHALL sama dengan jumlah rules dimana measured value > 50% of threshold
 - Threat level SHALL LOW jika 0 warnings, ELEVATED jika 1 warning, CRITICAL jika 2+ warnings (escalation)
-- Jika ADMIN_KEY_CHANGE atau PARAMETER_CHANGE terdeteksi DAN minimal 1 rule lain dalam warning state, threat level SHALL CRITICAL
+- Jika ADMIN_ACTION atau  terdeteksi DAN minimal 1 rule lain dalam warning state, threat level SHALL CRITICAL
 - Jika any single rule breach, threat level SHALL CRITICAL
 - Saat escalation ke CRITICAL, result SHALL mengandung semua contributing rule IDs dan escalation reason
 
@@ -958,7 +958,7 @@ class Settings(BaseSettings):
 
 ### Property 12: Simulation Output Correctness
 
-*For any* set of simulation parameters (atau default values), simulation result SHALL memenuhi: `amount_saved` = `damage_without` - `damage_with_killswitch`, `damage_without` = $285M (fixed), `damage_with_killswitch` < `damage_without`, setiap timeline entry mengandung timestamp, event description, evaluation result, threat level, dan response action, dan rules_used mencerminkan parameter yang diberikan (bukan default jika parameter di-override).
+*For any* set of replay parameters (atau default values), simulation result SHALL memenuhi: `amount_saved` = `damage_without` - `damage_with_killswitch`, `damage_without` = $285M (fixed), `damage_with_killswitch` < `damage_without`, setiap timeline entry mengandung timestamp, event description, evaluation result, threat level, dan response action, dan rules_used mencerminkan parameter yang diberikan (bukan default jika parameter di-override).
 
 **Validates: Requirements 13.2, 13.3, 13.5**
 

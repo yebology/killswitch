@@ -82,7 +82,7 @@ Three components:
 
 1. **Guardian Program (On-chain)** — Anchor/Rust smart contract on Solana. Stores protocol configs, invariant rules, and circuit breaker state as PDAs. Triggers pause/resume via CPI.
 2. **Sentinel Service (Off-chain)** — Go + Fiber backend. Subscribes to Solana TX stream, evaluates transactions against invariant rules, triggers on-chain circuit breaker, dispatches alerts.
-3. **Dashboard (Frontend)** — Next.js 16 + Tailwind CSS v4 + shadcn/ui. Real-time monitoring, rule configuration, incident timeline, Drift hack simulation.
+3. **Dashboard (Frontend)** — Next.js 16 + Tailwind CSS v4 + shadcn/ui. Real-time monitoring, rule configuration, incident timeline, Drift hack replay.
 
 ## Tech Stack
 
@@ -173,16 +173,13 @@ Wallet-based authentication — no Firebase, no API keys, no passwords:
 3. **Normal Monitoring** — Sentinel subscribes to TX stream → Parse + evaluate each TX → All pass → Log + update dashboard via WebSocket
 4. **Attack Detection** — Rule breached → Sentinel calls Guardian Program → trigger_pause → Protocol paused on-chain → Alert dispatched → Dashboard shows incident
 5. **Incident Review & Resume** — Team reviews incident timeline → Confirm attack or false alarm → Resume via guardian wallet signature
-6. **Drift Simulation** — Public demo page → Replay Drift hack transactions → Show detection timeline → "Saved $279M"
+6. **Drift Replay** — Public demo page → Replay Drift hack transactions → Show detection timeline → "Saved $279M"
 
 ## Invariant Types
 
 - `WITHDRAWAL_RATE` — Max withdrawal amount per time window
 - `TVL_DROP` — Max TVL percentage drop in time window
-- `ADMIN_KEY_CHANGE` — Detect authority/admin key changes
-- `SINGLE_TX_SIZE` — Max single transaction amount
-- `PARAMETER_CHANGE` — Detect safety parameter modifications
-- Custom composable rules for protocol-specific needs
+- `ADMIN_ACTION` — Detect any admin activity (key change, parameter modification, config update)
 
 ### Severity Escalation (Multi-Signal Correlation)
 
@@ -190,14 +187,14 @@ Evaluator otomatis correlate multiple signals:
 - Warning = measured value > 50% of user-set threshold
 - Combined Threat Level: LOW (0 warnings), ELEVATED (1), HIGH (2+), CRITICAL (breach/escalation)
 - 2+ rules warning bersamaan → auto-escalate ke CRITICAL → trigger pause
-- Admin/parameter change + any other warning → auto-escalate ke CRITICAL
+- Admin action + any other warning → auto-escalate ke CRITICAL
 - User tidak perlu configure — logic otomatis di evaluator
 
 ## API Structure
 
 ### Public Endpoints
 - `GET /api/health` — Health check
-- `GET /api/simulate/drift` — Drift hack simulation (public demo)
+- `GET /api/simulate/drift` — Drift hack replay (public demo)
 
 ### Protected Endpoints (Wallet Auth)
 - `POST /api/auth/verify` — Verify wallet signature
@@ -223,7 +220,7 @@ Evaluator otomatis correlate multiple signals:
 - Auto-pause working end-to-end
 - Telegram alerts
 - Dashboard with real-time monitoring
-- Drift hack simulation demo
+- Drift hack replay demo
 - Pitch video + technical demo video
 
 ### Not in MVP
@@ -236,5 +233,5 @@ Evaluator otomatis correlate multiple signals:
 
 1. **Backend Core** — Config, entities, repos, DI container, routes, main.go, protocol + invariant CRUD, sentinel service, evaluator, alert dispatcher, WebSocket hub, wallet auth, simulator
 2. **Smart Contract** — Guardian Program instructions, PDA state, error codes, tests, deploy to devnet, circuit breaker integration
-3. **Frontend** — Next.js setup, wallet auth, landing page, dashboard, protocol config UI, incident timeline, Drift simulation page
+3. **Frontend** — Next.js setup, wallet auth, landing page, dashboard, protocol config UI, incident timeline, Drift replay page
 4. **Polish + Demo** — End-to-end testing, UI polish, pitch video, technical demo, deploy to Vercel + Railway

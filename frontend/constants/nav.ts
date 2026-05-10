@@ -30,7 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
     isPublic: false,
   },
   {
-    label: "Simulate",
+    label: "Replay",
     path: "/simulate",
     icon: Play,
     isPublic: true,

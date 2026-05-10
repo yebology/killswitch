@@ -15,7 +15,7 @@ Audits catch bugs before deployment. Killswitch catches exploits during executio
 Every DeFi protocol on Solana — Jupiter, Raydium, Marinade, Kamino — is vulnerable to the same class of attack that hit Drift: valid transactions that are malicious in aggregate. Killswitch provides the missing runtime defense layer:
 
 - 🔍 **Real-time Monitoring** — Subscribe to every transaction hitting your program, evaluated against your security rules
-- 🚨 **Anomaly Detection** — Detect unusual withdrawal rates, TVL drops, admin key changes, oracle manipulation
+- 🚨 **Anomaly Detection** — Detect unusual withdrawal rates, TVL drops, and admin actions
 - 🛑 **Auto-Pause (Circuit Breaker)** — Automatically pause your program on-chain when thresholds are breached
 - 📢 **Instant Alerts** — Telegram notifications the moment something is wrong
 - 📊 **Incident Timeline** — Full chronological replay of what happened, which rule triggered, and what was saved
@@ -43,18 +43,15 @@ Configurable security rules that should never be violated:
 |---|---|---|
 | **Withdrawal Rate** | Max $5M per minute | Auto-pause |
 | **TVL Drop** | Max 10% drop in 5 minutes | Auto-pause |
-| **Admin Key Change** | Any authority change | Alert |
-| **Parameter Change** | Safety limits modified | Alert |
-| **Single TX Size** | Max $1M per transaction | Auto-pause |
-| **Custom** | User-defined conditions | Configurable |
+| **Admin Action** | Any admin activity (key change, parameter modification) | Alert |
 
-**Severity Escalation:** Killswitch automatically correlates multiple signals. If 2+ rules are in warning state simultaneously (>50% of threshold), or an admin/parameter change occurs alongside any other warning, the system auto-escalates to CRITICAL and triggers pause — even if no single rule has been breached.
+**Severity Escalation:** Killswitch automatically correlates multiple signals. If 2+ rules are in warning state simultaneously (>50% of threshold), or an admin action occurs alongside any other warning, the system auto-escalates to CRITICAL and triggers pause — even if no single rule has been breached.
 
 ### 📢 Telegram Alerts
 - Telegram bot notifications for all incidents and breaches
 - Dashboard real-time push via WebSocket
 
-### 🔄 Drift Hack Simulation
+### 🔄 Drift Hack Replay
 - Replay actual Drift Protocol hack transactions through Killswitch
 - Visual timeline showing detection → warning → breach → auto-pause
 - Adjustable rules to see different outcomes
@@ -168,7 +165,7 @@ killswitch/
 │   │   ├── dashboard/      # Main monitoring dashboard
 │   │   ├── protocols/      # Protocol list + detail + invariant config
 │   │   ├── incidents/      # Incident history + timeline
-│   │   └── simulate/       # Drift hack simulation
+│   │   └── simulate/       # Drift hack replay
 │   ├── components/
 │   │   ├── ui/             # shadcn/ui components
 │   │   ├── layout/         # Navbar, Sidebar, Footer
@@ -276,7 +273,7 @@ cd frontend && npm install && npm run dev
 | Method | Endpoint | Description |
 |--------|----------|------------|
 | GET | `/api/health` | Health check |
-| GET | `/api/simulate/drift` | Run Drift hack simulation (public demo) |
+| GET | `/api/simulate/drift` | Run Drift hack replay (public demo) |
 
 ### Protected (Wallet Auth)
 | Method | Endpoint | Description |
@@ -296,7 +293,7 @@ cd frontend && npm install && npm run dev
 
 ---
 
-## 🔥 The Drift Hack Simulation
+## 🔥 The Drift Hack Replay
 
 The killer demo:
 

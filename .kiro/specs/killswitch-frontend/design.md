@@ -111,9 +111,9 @@ sequenceDiagram
     Page-->>User: Render TX feed, status indicators
 
     Note over User,Backend: Simulation Flow
-    User->>Page: Click Run Simulation
+    User->>Page: Click Run Replay
     Page->>API: GET /api/simulate/drift?params
-    API->>Backend: Run simulation
+    API->>Backend: Run replay
     Backend-->>API: { timeline, summary }
     API-->>Page: Store timeline data
     Page->>Hook: useSimulation(timeline)
@@ -155,7 +155,7 @@ app/layout.tsx
 │           │   ├── InvariantEditor
 │           │   ├── RegisterForm (if no protocol)
 │           │   └── ResumeButton (if paused)
-│           └── simulate/page.tsx (Drift Simulation)
+│           └── simulate/page.tsx (Drift Replay)
 │               ├── SimulationControls
 │               ├── DriftReplay (timeline)
 │               └── SimulationSummary
@@ -213,7 +213,7 @@ interface SidebarProps {
 
 // Behavior:
 // - Menu items: Dashboard, Protocols, Simulate
-// - Hidden pada Landing Page dan Simulation Page
+// - Hidden pada Landing Page dan Replay Page
 // - Collapse ke hamburger menu pada viewport < 768px
 // - Fixed left, full height
 ```
@@ -326,7 +326,7 @@ interface InvariantEditorProps {
 }
 
 // Fields:
-// - Type (dropdown: WITHDRAWAL_RATE, TVL_DROP, ADMIN_KEY_CHANGE, SINGLE_TX_SIZE, PARAMETER_CHANGE)
+// - Type (dropdown: WITHDRAWAL_RATE, TVL_DROP, ADMIN_ACTION, , )
 // - Threshold (numeric input, required, > 0)
 // - Time Window in seconds (numeric input, required, > 0)
 // - Action (radio: "pause" / "alert")
@@ -504,9 +504,9 @@ interface Protocol {
 type InvariantType =
   | "WITHDRAWAL_RATE"
   | "TVL_DROP"
-  | "ADMIN_KEY_CHANGE"
-  | "SINGLE_TX_SIZE"
-  | "PARAMETER_CHANGE";
+  | "ADMIN_ACTION"
+  | ""
+  | "";
 
 type InvariantAction = "pause" | "alert";
 
@@ -654,7 +654,7 @@ const INVARIANT_TYPES: InvariantTypeInfo[] = [
     defaultTimeWindow: 300,
   },
   {
-    value: "ADMIN_KEY_CHANGE",
+    value: "ADMIN_ACTION",
     label: "Admin Key Change",
     description: "Detect authority or admin key changes",
     unit: "event",
@@ -662,7 +662,7 @@ const INVARIANT_TYPES: InvariantTypeInfo[] = [
     defaultTimeWindow: 0,
   },
   {
-    value: "SINGLE_TX_SIZE",
+    value: "",
     label: "Single TX Size",
     description: "Maximum single transaction amount",
     unit: "USD",
@@ -670,7 +670,7 @@ const INVARIANT_TYPES: InvariantTypeInfo[] = [
     defaultTimeWindow: 0,
   },
   {
-    value: "PARAMETER_CHANGE",
+    value: "",
     label: "Parameter Change",
     description: "Detect safety parameter modifications",
     unit: "event",
@@ -797,7 +797,7 @@ Setiap halaman dan komponen yang melakukan data fetching SHALL menampilkan loadi
 |----------|--------------|
 | **Dashboard** | Skeleton cards untuk status, TX feed, invariant status |
 | **Protocol Detail** | Skeleton untuk protocol info dan invariant list |
-| **Simulation** | Disabled "Run Simulation" button dengan spinner saat API call |
+| **Simulation** | Disabled "Run Replay" button dengan spinner saat API call |
 | **Register Form** | Disabled submit button dengan spinner saat POST |
 | **Invariant Editor** | Disabled submit button dengan spinner saat POST |
 

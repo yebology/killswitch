@@ -31,7 +31,7 @@ killswitch/
 │   │   ├── handlers/           # HTTP request handlers
 │   │   │   ├── protocol.go    # Register/get/list protocols
 │   │   │   ├── invariant.go   # Add/list invariants
-│   │   │   ├── simulate.go    # Run Drift hack simulation
+│   │   │   ├── simulate.go    # Run Drift hack replay
 │   │   │   └── auth.go        # Verify wallet signature
 │   │   │
 │   │   ├── http/               # Route registration per domain
@@ -76,7 +76,7 @@ killswitch/
 │   │   ├── seed/
 │   │   │   └── main.go        # Seed DB with sample protocol + invariants
 │   │   └── simulate/
-│   │       └── main.go        # CLI: run Drift hack simulation standalone
+│   │       └── main.go        # CLI: run Drift hack replay standalone
 │   │
 │   ├── config/
 │   │   └── config.go          # Env config loader (RPC URL, Geyser URL, DB, Telegram token)
@@ -117,7 +117,7 @@ killswitch/
 │   │   │   └── [id]/
 │   │   │       └── page.tsx   # Protocol detail + invariant config
 │   │   ├── simulate/
-│   │   │   └── page.tsx       # Drift hack simulation page
+│   │   │   └── page.tsx       # Drift hack replay page
 │   │   └── layout.tsx
 │   │
 │   ├── components/
@@ -134,7 +134,7 @@ killswitch/
 │   │   │   ├── register-form.tsx       # Register new protocol
 │   │   │   └── invariant-editor.tsx    # Add invariant rules
 │   │   ├── simulate/
-│   │   │   ├── drift-replay.tsx        # Drift hack simulation visualizer
+│   │   │   ├── drift-replay.tsx        # Drift hack replay visualizer
 │   │   │   └── simulation-controls.tsx # Play/pause/speed controls
 │   │   └── providers/
 │   │       └── theme-provider.tsx
