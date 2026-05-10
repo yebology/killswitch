@@ -1,4 +1,4 @@
-import { LayoutDashboard, Shield, Play, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Shield, type LucideIcon } from "lucide-react";
 
 /** A navigation item rendered in the Sidebar. */
 export interface NavItem {
@@ -13,7 +13,7 @@ export interface NavItem {
 }
 
 /**
- * Primary navigation items for the Sidebar.
+ * Primary navigation items for the Navbar.
  * Order determines display order in the menu.
  */
 export const NAV_ITEMS: NavItem[] = [
@@ -28,11 +28,5 @@ export const NAV_ITEMS: NavItem[] = [
     path: "/protocols",
     icon: Shield,
     isPublic: false,
-  },
-  {
-    label: "Replay",
-    path: "/simulate",
-    icon: Play,
-    isPublic: true,
   },
 ];

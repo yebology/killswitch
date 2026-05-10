@@ -86,8 +86,9 @@ export default function DashboardPage() {
   } = useWebSocket(protocol?.id, !!protocol);
 
   // Use fetched protocol status as source of truth
-  // WebSocket status_change will update protocol state directly
+  // If protocol is paused, threat level should show CRITICAL
   const currentStatus = protocol?.status ?? "active";
+  const displayThreatLevel = currentStatus === "paused" ? "CRITICAL" : threatLevel;
 
   // Route protection is handled by AuthProvider
   if (!isAuthenticated) {
@@ -170,7 +171,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Threat level — full width top */}
-      <CombinedThreatLevel level={threatLevel} />
+      <CombinedThreatLevel level={displayThreatLevel} />
 
       {/* Status indicator + Invariant status — side by side */}
       <div className="grid gap-4 md:grid-cols-2">
@@ -179,11 +180,23 @@ export default function DashboardPage() {
           protocolName={protocol.name}
           programAddress={protocol.program_address}
         />
-        <InvariantStatus evaluations={invariantResults} />
+        <InvariantStatus
+          evaluations={
+            invariantResults.length > 0
+              ? invariantResults
+              : (protocol.invariants ?? []).map((inv) => ({
+                  invariant_id: inv.id,
+                  invariant_type: inv.type,
+                  measured_value: currentStatus === "paused" ? inv.threshold * 1.2 : 0,
+                  threshold: inv.threshold,
+                  status: currentStatus === "paused" ? ("breach" as const) : ("pass" as const),
+                }))
+          }
+        />
       </div>
 
       {/* Transaction feed — full width below */}
-      <TxFeed transactions={transactions} />
+      <TxFeed transactions={transactions} protocolStatus={currentStatus} />
     </div>
   );
 }

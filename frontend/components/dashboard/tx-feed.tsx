@@ -11,6 +11,7 @@ const DEFAULT_MAX_ENTRIES = 100;
 interface TxFeedProps {
   transactions: WSTransactionData[];
   maxEntries?: number;
+  protocolStatus?: "active" | "paused";
 }
 
 /**
@@ -58,6 +59,7 @@ const EVAL_DOT_CLASSES: Record<WSTransactionData["eval_result"], string> = {
 export function TxFeed({
   transactions,
   maxEntries = DEFAULT_MAX_ENTRIES,
+  protocolStatus,
 }: TxFeedProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +85,9 @@ export function TxFeed({
       >
         {visibleTxs.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">
-            No transactions yet
+            {protocolStatus === "paused"
+              ? "🛑 Protocol is paused — monitoring suspended"
+              : "No transactions yet"}
           </p>
         ) : (
           visibleTxs.map((tx, index) => (
